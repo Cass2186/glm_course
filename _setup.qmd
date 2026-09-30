@@ -1,0 +1,29 @@
+::: {.callout-note collapse="true"}
+## Course data (loads automatically; click to see the code)
+
+R runs inside your browser. The first visit downloads R and the packages, which takes 20–40 seconds; after that the browser caches them. Wait for this block to finish before running exercises.
+
+```{webr}
+#| autorun: true
+#| edit: false
+#| output: false
+# dplyr/tidyr go last so that select() and filter() are never masked by MASS or stats
+pkgs <- c("ggplot2", "broom", "car", "emmeans", "lme4", "lmerTest", "sandwich", "lmtest",
+          "pROC", "performance", "palmerpenguins", "ISLR2", "tidyr", "dplyr")
+for (p in intersect(pkgs, rownames(installed.packages())))
+  suppressPackageStartupMessages(library(p, character.only = TRUE))
+
+# Western blot densitometry: 4 genotypes x 4 biological reps x 3 technical reps
+blot <- read.csv("data/western_blot_example.csv")
+blot$Ratio    <- blot$Target_Intensity / blot$Loading_Control_Intensity
+blot$Genotype <- factor(blot$Genotype, levels = c("WT", "HET", "KO", "RESCUE"))
+
+# One row per biological replicate (technical replicates averaged)
+blot_bio <- aggregate(Ratio ~ Genotype + Bio_Rep, data = blot, FUN = mean)
+
+quine <- MASS::quine
+if (requireNamespace("palmerpenguins", quietly = TRUE)) penguins <- palmerpenguins::penguins
+if (requireNamespace("ISLR2", quietly = TRUE)) Default <- ISLR2::Default
+if ("ggplot2" %in% loadedNamespaces()) theme_set(theme_bw(base_size = 13))
+```
+:::

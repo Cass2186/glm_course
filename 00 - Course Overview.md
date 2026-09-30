@@ -6,6 +6,9 @@ created: 2026-07-08
 
 # R Statistics & GLM — Course Overview
 
+> [!tip] Interactive version
+> Every module has a companion page where the practice questions run in your browser (webR), with hints, solutions and interactive explorers. Source: `index.qmd` and `M0.qmd`–`M9.qmd`; rendered site: `docs/`.
+
 A 10-part progression (an R primer, eight substantive modules, and a capstone), each ~1 week at ~3–5 hrs. Every substantive module has readings, coded practice, and a mini-project. The supplied examples use built-in or package datasets plus one included CSV, so they are reproducible.
 
 > [!info] Applied wet-lab track

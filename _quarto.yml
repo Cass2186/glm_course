@@ -1,0 +1,67 @@
+project:
+  type: website
+  output-dir: docs
+  resources:
+    - data/
+  render:
+    - index.qmd
+    - M0.qmd
+    - M1.qmd
+    - M2.qmd
+    - M3.qmd
+    - M4.qmd
+    - M5.qmd
+    - M6.qmd
+    - M7.qmd
+    - M8.qmd
+    - M9.qmd
+
+website:
+  title: "R Statistics & GLMs"
+  page-navigation: true
+  navbar:
+    left:
+      - href: index.qmd
+        text: Overview
+      - text: "Foundations"
+        menu:
+          - href: M0.qmd
+            text: "0 · R syntax primer"
+          - href: M1.qmd
+            text: "1 · R foundations"
+          - href: M2.qmd
+            text: "2 · Distributions & simulation"
+          - href: M3.qmd
+            text: "3 · Classical inference"
+      - text: "Linear models"
+        menu:
+          - href: M4.qmd
+            text: "4 · Linear regression"
+          - href: M5.qmd
+            text: "5 · Diagnostics"
+      - text: "GLMs"
+        menu:
+          - href: M6.qmd
+            text: "6 · The GLM framework"
+          - href: M7.qmd
+            text: "7 · Logistic regression"
+          - href: M8.qmd
+            text: "8 · Counts & mixed models"
+      - href: M9.qmd
+        text: "9 · Capstone"
+
+format:
+  live-html:
+    theme:
+      light: [flatly, theme.scss]
+      dark: [darkly, theme.scss]
+    toc: true
+    toc-depth: 2
+    code-copy: true
+    mainfont: "Source Sans 3"
+    grid:
+      body-width: 860px
+
+engine: knitr
+execute:
+  freeze: false

@@ -1,0 +1,260 @@
+---
+title: "1 · R foundations"
+subtitle: "Data frames, dplyr, ggplot2, broom, and getting spreadsheet data tidy"
+webr:
+  resources:
+    - data
+  cell-options:
+    fig-width: 7
+    fig-height: 4.2
+    timelimit: 180
+    persist: true
+  packages:
+    - MASS
+    - dplyr
+    - tidyr
+    - ggplot2
+    - broom
+    - palmerpenguins
+---
+
+{{< include _extensions/live/_knitr.qmd >}}
+{{< include _setup.qmd >}}
+
+Almost everything in applied statistics in R starts by getting your data into a **tidy data frame**: one row per observation, one column per variable. Get that right and most of the ecosystem "just works".
+
+- **Base R and `dplyr`** do the same jobs. Learn to read both: `aggregate(y ~ g, data = df, FUN = mean)` and `df |> group_by(g) |> summarise(m = mean(y))`.
+- **`ggplot2`**: a plot is `data + aes() mapping + geoms (+ facets, scales, labels, theme)`. `aes()` maps *columns* to visual channels; anything constant (one colour for all points) goes **outside** `aes()`.
+- **Excel → R**: `readxl::read_excel()` or `read.csv()` after exporting. Then pivot to long form (`tidyr::pivot_longer()`) and set factor levels yourself so WT is the reference.
+- **`broom`**: `tidy()` gives the coefficient table, `glance()` the model-level statistics, both as data frames you can stack and compare.
+
+## Explore: build a penguin plot
+
+Pick the variables and the grouping. The box prints the `ggplot2` code for the plot it drew, so you can copy it.
+
+```{ojs}
+//| echo: false
+vars = ["flipper_length_mm", "bill_length_mm", "bill_depth_mm", "body_mass_g"]
+groups = ["none", "species", "sex", "island"]
+viewof m1_x = Inputs.select(vars, {value: "flipper_length_mm", label: "x"})
+viewof m1_y = Inputs.select(vars, {value: "body_mass_g", label: "y"})
+viewof m1_col = Inputs.select(groups, {value: "species", label: "Colour by"})
+viewof m1_facet = Inputs.select(groups, {value: "none", label: "Facet by"})
+viewof m1_smooth = Inputs.toggle({label: "Linear smoother", value: true})
+```
+
+```{webr}
+#| input:
+#|   - m1_x
+#|   - m1_y
+#|   - m1_col
+#|   - m1_facet
+#|   - m1_smooth
+#| caption: Plot builder
+#| autorun: true
+d <- penguins[!is.na(penguins$sex), ]
+aes_col <- if (m1_col == "none") aes() else aes(colour = .data[[m1_col]])
+p <- ggplot(d, aes(.data[[m1_x]], .data[[m1_y]])) + aes_col +
+  geom_point(alpha = 0.7) + labs(x = m1_x, y = m1_y)
+if (m1_smooth)          p <- p + geom_smooth(method = "lm", se = FALSE, formula = y ~ x)
+if (m1_facet != "none") p <- p + facet_wrap(vars(.data[[m1_facet]]))
+print(p)
+
+cat(sprintf("ggplot(penguins, aes(%s, %s%s)) +\n  geom_point(alpha = 0.7)%s%s\n",
+            m1_x, m1_y, if (m1_col == "none") "" else paste0(", colour = ", m1_col),
+            if (m1_smooth) ' +\n  geom_smooth(method = "lm", se = FALSE)' else "",
+            if (m1_facet == "none") "" else paste0(" +\n  facet_wrap(~ ", m1_facet, ")")))
+```
+
+::: {.small-note}
+Start with flipper length vs body mass, no colour: one steep line. Colour by species: each species' slope is shallower than the pooled one. Species differ in *both* variables, so pooling exaggerates the slope, which is the intuition behind adjusted associations in Module 4.
+:::
+
+## Exercises
+
+`penguins` is already loaded. It has missing values, so remember `na.rm = TRUE`.
+
+### Q1 — Summaries two ways
+
+Compute the mean, median and SD of `bill_length_mm` **for each species**, once in base R and once with `dplyr`. Confirm the numbers match.
+
+```{webr}
+#| exercise: m1q1
+# Base R
+aggregate(bill_length_mm ~ ______, data = penguins,
+          FUN = function(x) c(mean = mean(x), median = median(x), sd = sd(x)))
+
+# dplyr
+penguins |>
+  group_by(______) |>
+  summarise(
+    mean_bill   = mean(bill_length_mm, na.rm = TRUE),
+    median_bill = ______,
+    sd_bill     = ______,
+    n           = sum(!is.na(bill_length_mm))
+  )
+```
+
+::: {.hint exercise="m1q1"}
+Group by `species`. The formula interface of `aggregate()` drops rows with `NA` automatically; in `summarise()` you need `na.rm = TRUE` in each call.
+:::
+
+::: {.solution exercise="m1q1"}
+```r
+aggregate(bill_length_mm ~ species, data = penguins,
+          FUN = function(x) c(mean = mean(x), median = median(x), sd = sd(x)))
+
+penguins |>
+  group_by(species) |>
+  summarise(
+    mean_bill   = mean(bill_length_mm,   na.rm = TRUE),
+    median_bill = median(bill_length_mm, na.rm = TRUE),
+    sd_bill     = sd(bill_length_mm,     na.rm = TRUE),
+    n           = sum(!is.na(bill_length_mm))
+  )
+```
+Adelie ~39 mm, Chinstrap ~49 mm, Gentoo ~47 mm: bill length nearly separates Adelie from the other two but not Chinstrap from Gentoo.
+:::
+
+### Q2 — Three plots of flipper vs body mass
+
+Make: (1) all points, one colour, with an overall linear smoother; (2) coloured by species with per-species smoothers; (3) as (2) but faceted by island. Write one sentence on what each plot adds.
+
+```{webr}
+#| exercise: m1q2
+#| fig-height: 7
+p1 <- ggplot(penguins, aes(flipper_length_mm, body_mass_g)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE)
+
+p2 <- ggplot(penguins, aes(flipper_length_mm, body_mass_g, colour = ______)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE)
+
+p3 <- p2 + facet_wrap(~ ______)
+
+p1; p2; p3
+```
+
+::: {.solution exercise="m1q2"}
+```r
+p2 <- ggplot(penguins, aes(flipper_length_mm, body_mass_g, colour = species)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE)
+p3 <- p2 + facet_wrap(~ island)
+```
+1. Overall positive relationship: bigger flippers, bigger birds.
+2. Within each species the slope is much shallower than the pooled slope. Species differ in *both* flipper length and mass, so pooling exaggerates the slope (an aggregation effect, though not a full Simpson's reversal).
+3. Species aren't evenly spread across islands (Gentoo only on Biscoe, Chinstrap only on Dream), so any "island effect" is confounded with species.
+:::
+
+### Q3 — Write a `describe()` function
+
+Return a one-row data frame with `n` (non-missing), `mean`, `sd`, `median`, `IQR` and `n_missing`, then apply it to every numeric column.
+
+```{webr}
+#| exercise: m1q3
+describe <- function(x) {
+  data.frame(
+    n         = sum(______),
+    mean      = mean(x, na.rm = TRUE),
+    sd        = sd(x, na.rm = TRUE),
+    median    = median(x, na.rm = TRUE),
+    IQR       = IQR(x, na.rm = TRUE),
+    n_missing = sum(______)
+  )
+}
+
+describe(penguins$body_mass_g)
+
+penguins |>
+  select(where(is.numeric)) |>
+  lapply(describe) |>
+  bind_rows(.id = "variable")
+```
+
+::: {.hint exercise="m1q3"}
+`sum(!is.na(x))` counts non-missing values; `sum(is.na(x))` counts missing ones.
+:::
+
+::: {.solution exercise="m1q3"}
+```r
+describe <- function(x) {
+  data.frame(
+    n = sum(!is.na(x)), mean = mean(x, na.rm = TRUE), sd = sd(x, na.rm = TRUE),
+    median = median(x, na.rm = TRUE), IQR = IQR(x, na.rm = TRUE),
+    n_missing = sum(is.na(x))
+  )
+}
+```
+:::
+
+### Q4 — Read a model with `broom`
+
+Fit `lm(body_mass_g ~ flipper_length_mm)`, then get the coefficient table and the model-level statistics. Interpret the slope in real units.
+
+```{webr}
+#| exercise: m1q4
+m <- lm(body_mass_g ~ flipper_length_mm, data = penguins)
+______(m)    # coefficient table
+______(m)    # R², F, AIC, ...
+```
+
+::: {.solution exercise="m1q4"}
+```r
+tidy(m)
+glance(m)
+```
+Each extra millimetre of flipper is associated with about **50 g** more body mass (slope ≈ 49.7 g/mm), and flipper length alone explains about **76%** of the variance (R² ≈ 0.76). This is a *marginal* association, not causal and not species-adjusted; Q2 showed it pools several shallower within-species slopes.
+:::
+
+### Q5 — Western blot: spreadsheet to tidy, normalized data
+
+`data/western_blot_example.csv` mirrors an Excel export after quantifying blots (one row = one lane × technical replicate). Inspect it, normalize to the loading control, average the three technical replicates within each biological replicate (you should get **16 rows**), set WT as the reference, and make the dot plot you'd put in a paper.
+
+```{webr}
+#| exercise: m1q5
+blot <- read.csv("data/western_blot_example.csv")
+str(blot)
+table(blot$Genotype)
+
+blot_bio <- blot |>
+  mutate(Ratio = ______ / ______) |>
+  group_by(Genotype, ______) |>
+  summarise(Ratio = mean(Ratio), .groups = "drop") |>
+  mutate(Genotype = factor(Genotype, levels = c(______)))
+
+nrow(blot_bio)
+
+ggplot(blot_bio, aes(Genotype, Ratio, colour = Genotype)) +
+  geom_jitter(width = 0.15, size = 3, alpha = 0.8) +
+  stat_summary(fun = mean, geom = "crossbar", width = 0.5, colour = "black") +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2, colour = "black") +
+  labs(y = "Target / loading control (a.u.)") +
+  theme(legend.position = "none")
+```
+
+::: {.hint exercise="m1q5"}
+`Ratio = Target_Intensity / Loading_Control_Intensity`; group by `Genotype` and `Bio_Rep`; levels `c("WT", "HET", "KO", "RESCUE")`.
+:::
+
+::: {.solution exercise="m1q5"}
+```r
+blot_bio <- blot |>
+  mutate(Ratio = Target_Intensity / Loading_Control_Intensity) |>
+  group_by(Genotype, Bio_Rep) |>
+  summarise(Ratio = mean(Ratio), .groups = "drop") |>
+  mutate(Genotype = factor(Genotype, levels = c("WT", "HET", "KO", "RESCUE")))
+```
+- The biological replicate is the unit of replication: **n = 4 per group**, not 12. Treating technical replicates as independent inflates n and gives a bogus test. In Module 8 the clustering is modelled with a biological-replicate random intercept instead.
+- `RESCUE` should sit back near WT and `KO` be clearly reduced. Eyeballing this before any test is a sanity check that the code did what you expected.
+:::
+
+## Mini-project
+
+Build the content of `module_01_report.qmd` here: the Q1 summary table, the three Q2 plots with a sentence each, the Q4 `tidy()` output with its interpretation, and the Q5 dot plot. Then paste it into a Quarto document locally and render it.
+
+```{webr}
+#| caption: Sandbox
+# your code here
+```

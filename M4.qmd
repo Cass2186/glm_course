@@ -1,0 +1,219 @@
+---
+title: "4 · Linear regression"
+subtitle: "lm(), adjusted coefficients, the model matrix, interactions, prediction and model comparison"
+webr:
+  resources:
+    - data
+  cell-options:
+    fig-width: 7
+    fig-height: 4.2
+    timelimit: 180
+    persist: true
+  packages:
+    - MASS
+    - dplyr
+    - ggplot2
+    - broom
+    - palmerpenguins
+---
+
+{{< include _extensions/live/_knitr.qmd >}}
+{{< include _setup.qmd >}}
+
+The linear model is the atom of everything that follows: ANOVA was a linear model with a categorical predictor, every GLM is a linear model with a link function, and mixed models are linear models with extra variance components.
+
+$$y_i = \beta_0 + \beta_1 x_{1i} + \beta_2 x_{2i} + \dots + \varepsilon_i, \qquad \varepsilon_i \sim \mathrm{Normal}(0, \sigma^2)$$
+
+- **Continuous predictor**: change in mean y per one-unit increase in x, *holding the other included predictors fixed*.
+- **Factor**: R builds dummy columns; each coefficient is a difference from the reference level. Inspect with `model.matrix()` and `contrasts()`.
+- **Interaction** `x * z`: the effect of x depends on z. With an interaction present, a "main effect" coefficient is the effect when the other variable is 0 or at its reference level, so centre variables and report simple effects.
+- **`predict()`**: `interval = "confidence"` covers the *mean* at those X's; `interval = "prediction"` covers *one new observation* and is always wider.
+- **Comparing models**: nested fits on the same rows → `anova(small, big)` (F-test); non-nested → `AIC()` (lower is better; differences under 2 are not compelling).
+
+```{webr}
+#| caption: What lm() actually builds
+head(model.matrix(~ Genotype, data = blot_bio))
+contrasts(blot_bio$Genotype)
+```
+
+## Explore: adjusting changes the slope
+
+The question is "how does mpg change with weight?". Tick covariates to adjust for. The plot is an **added-variable plot**: mpg and weight each with the covariates regressed out, so its slope is exactly the adjusted `wt` coefficient.
+
+```{ojs}
+//| echo: false
+viewof m4_covs = Inputs.checkbox(["hp", "cyl", "disp", "qsec", "am", "drat"], {label: "Adjust for", value: []})
+```
+
+```{webr}
+#| input:
+#|   - m4_covs
+#| caption: Adjustment explorer
+#| autorun: true
+covs <- as.character(unlist(m4_covs))
+f    <- reformulate(c("wt", covs), response = "mpg")
+fit  <- lm(f, data = mtcars)
+cat("Model:", deparse(f), "\n")
+print(round(cbind(estimate = coef(fit)["wt"], confint(fit)["wt", , drop = FALSE],
+                  se = summary(fit)$coef["wt", 2]), 3))
+
+rx <- if (length(covs)) resid(lm(reformulate(covs, "wt"),  data = mtcars)) else mtcars$wt  - mean(mtcars$wt)
+ry <- if (length(covs)) resid(lm(reformulate(covs, "mpg"), data = mtcars)) else mtcars$mpg - mean(mtcars$mpg)
+ggplot(data.frame(rx, ry), aes(rx, ry)) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", formula = y ~ x, se = TRUE, colour = "#3b5a8f") +
+  labs(x = "wt (adjusted)", y = "mpg (adjusted)",
+       title = sprintf("wt slope = %.2f mpg per 1000 lb", coef(fit)["wt"]))
+```
+
+::: {.small-note}
+Adding `hp` moves the slope from −5.3 to −3.9, because heavy cars also tend to be powerful. Adding `disp` or `cyl` widens the interval, because they overlap heavily with weight (collinearity, Module 5). Which slope is "right" depends on the question, not on which one has the smallest p-value.
+:::
+
+## Exercises
+
+### Q1 — Simple regression in real units
+
+Fit `mpg ~ wt` and `mpg ~ hp`. Report each slope with its 95% CI, compare residual standard errors, and decide whether the intercepts mean anything.
+
+```{webr}
+#| exercise: m4q1
+fit_wt <- lm(mpg ~ wt, data = mtcars)
+fit_hp <- lm(mpg ~ ______, data = mtcars)
+summary(fit_wt); ______(fit_wt)
+summary(fit_hp); confint(fit_hp)
+c(wt = sigma(fit_wt), hp = sigma(fit_hp))   # residual SEs
+range(mtcars$wt)
+```
+
+::: {.solution exercise="m4q1"}
+```r
+fit_hp <- lm(mpg ~ hp, data = mtcars)
+confint(fit_wt)
+```
+`wt`: ≈ −5.34 mpg per 1000 lb (residual SE ≈ 3.05). `hp`: ≈ −0.068 mpg per horsepower (residual SE ≈ 3.86), so weight explains more. The `mpg ~ wt` intercept (~37 mpg) extrapolates to a weightless car: intercepts are meaningful only when x = 0 lies within the data.
+:::
+
+### Q2 — Adding a predictor changes the story
+
+Compare the `wt` coefficient with and without `hp`. Why does it move, and which one would you report?
+
+```{webr}
+#| exercise: m4q2
+coef(lm(mpg ~ wt, data = mtcars))
+coef(lm(mpg ~ wt + ______, data = mtcars))
+cor(mtcars$wt, mtcars$hp)
+```
+
+::: {.solution exercise="m4q2"}
+The slope shrinks from about −5.34 to −3.88. Heavier cars also have more horsepower, so without `hp` the `wt` slope absorbs part of the horsepower association. Which to report depends on the estimand: the simple slope is the marginal association; the adjusted one compares cars with the same horsepower. Neither is automatically causal.
+:::
+
+### Q3 — A categorical predictor as a linear model
+
+Fit `body_mass_g ~ species`, interpret the coefficients as mean differences and check against the group means. Then add `flipper_length_mm` and see what happens to the species coefficients.
+
+```{webr}
+#| exercise: m4q3
+fit_sp   <- lm(body_mass_g ~ species, data = penguins)
+fit_flsp <- lm(body_mass_g ~ ______ + species, data = penguins)
+coef(fit_sp)
+aggregate(body_mass_g ~ species, data = penguins, FUN = mean)
+coef(fit_flsp)
+```
+
+::: {.solution exercise="m4q3"}
+```r
+fit_flsp <- lm(body_mass_g ~ flipper_length_mm + species, data = penguins)
+```
+Intercept = mean(Adelie) ≈ 3700 g; Chinstrap ≈ +32 g; Gentoo ≈ +1375 g, matching the group means. At a common flipper length, Chinstrap is about 207 g *lighter* and Gentoo about 267 g heavier than Adelie. That is a conditional association, not proof that flipper length "explains" the species differences.
+:::
+
+### Q4 — Continuous × categorical interaction
+
+Fit separate slopes per species, compute the Gentoo slope by hand, and test the interaction.
+
+```{webr}
+#| exercise: m4q4
+fit_add <- lm(body_mass_g ~ flipper_length_mm + species, data = penguins)
+fit_int <- lm(body_mass_g ~ flipper_length_mm ______ species, data = penguins)
+b <- coef(fit_int)
+b
+
+gentoo_slope <- b["flipper_length_mm"] + b["______"]
+gentoo_slope
+
+anova(fit_add, fit_int)
+
+ggplot(penguins, aes(flipper_length_mm, body_mass_g, colour = species)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+::: {.hint exercise="m4q4"}
+The interaction is `*`. The Gentoo slope is the reference (Adelie) slope plus the `flipper_length_mm:speciesGentoo` term.
+:::
+
+::: {.solution exercise="m4q4"}
+```r
+fit_int <- lm(body_mass_g ~ flipper_length_mm * species, data = penguins)
+gentoo_slope <- b["flipper_length_mm"] + b["flipper_length_mm:speciesGentoo"]
+```
+`flipper_length_mm:speciesGentoo` is the *difference in slope* between Gentoo and Adelie. Adelie ≈ 32.8 g/mm, Gentoo ≈ 54.6 g/mm. The interaction terms jointly improve fit (F ≈ 5.53, p ≈ 0.0043).
+:::
+
+### Q5 — Predictions with intervals
+
+Predict body mass for a Chinstrap with 200 mm flippers and a Gentoo with 220 mm flippers, with confidence and prediction intervals.
+
+```{webr}
+#| exercise: m4q5
+fit_int <- lm(body_mass_g ~ flipper_length_mm * species, data = penguins)
+new_data <- data.frame(flipper_length_mm = c(200, 220),
+                       species = c("Chinstrap", "Gentoo"))
+predict(fit_int, newdata = new_data, interval = "______")
+predict(fit_int, newdata = new_data, interval = "______")
+```
+
+::: {.solution exercise="m4q5"}
+```r
+predict(fit_int, newdata = new_data, interval = "confidence")
+predict(fit_int, newdata = new_data, interval = "prediction")
+```
+The confidence interval is our uncertainty about the *average* mass of penguins like this; the prediction interval is our uncertainty about *one* penguin, so it adds the residual variance and is much wider.
+:::
+
+### Q6 — Model comparison
+
+Compare four `mtcars` models with nested F-tests and AIC. Which would you report?
+
+```{webr}
+#| exercise: m4q6
+f1 <- lm(mpg ~ wt, data = mtcars)
+f2 <- lm(mpg ~ wt + hp, data = mtcars)
+f3 <- lm(mpg ~ wt + hp + cyl, data = mtcars)
+f4 <- lm(mpg ~ wt * hp + cyl, data = mtcars)
+
+anova(f1, f2)
+anova(f2, f3)
+anova(f3, f4)
+AIC(______)
+```
+
+::: {.solution exercise="m4q6"}
+```r
+AIC(f1, f2, f3, f4)
+```
+f2 improves on f1 (p ≈ 0.0015); adding `cyl` is weak (p ≈ 0.098); the `wt:hp` interaction helps (p ≈ 0.0032), and f4 has the lowest AIC by about 8.5. Among these prespecified candidates the evidence favours f4, but with 32 cars treat in-sample selection as exploratory.
+:::
+
+## Mini-project
+
+Build the "best" model of `body_mass_g` from `flipper_length_mm`, `bill_length_mm`, `species`, `sex` and justified interactions. Start from **one complete-case dataset** so every model uses the same rows. Include the building sequence with `anova()`, a `tidy(fit, conf.int = TRUE)` table with a sentence per coefficient, an observed-vs-fitted plot, and predictions for three hypothetical penguins.
+
+```{webr}
+#| caption: Sandbox
+pg <- na.omit(penguins[, c("body_mass_g", "flipper_length_mm", "bill_length_mm", "species", "sex")])
+nrow(pg)
+# your code here
+```

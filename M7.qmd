@@ -1,0 +1,244 @@
+---
+title: "7 · Logistic regression"
+subtitle: "Log-odds and odds ratios, predicted probabilities, ROC/AUC, thresholds, grouped data and separation"
+webr:
+  resources:
+    - data
+  cell-options:
+    fig-width: 7
+    fig-height: 4.2
+    timelimit: 180
+    persist: true
+  packages:
+    - MASS
+    - dplyr
+    - tidyr
+    - ggplot2
+    - broom
+    - pROC
+    - ISLR2
+---
+
+{{< include _extensions/live/_knitr.qmd >}}
+{{< include _setup.qmd >}}
+
+$$\log\left(\frac{p}{1-p}\right) = \beta_0 + \beta_1 x_1 + \dots \qquad p = \frac{1}{1 + e^{-\eta}}$$
+
+- **Odds ratios**: `exp(β)` multiplies the *odds* per unit of x. Odds are not probabilities: doubling the odds takes p = 0.1 to 0.18 but p = 0.5 to 0.67.
+- **Predicted probabilities**: `predict(fit, newdata, type = "response")`, or `plogis()` of the linear predictor by hand.
+- **Confusion matrix**: sensitivity = TP/(TP + FN), specificity = TN/(TN + FP), precision = TP/(TP + FP).
+- **ROC / AUC**: sensitivity vs 1 − specificity as the threshold sweeps; AUC 0.5 = coin flip, 1 = perfect. Performance measured on the training data is optimistic: validate on held-out data.
+- **Thresholds**: 0.5 has no special status. Choose from the relative costs of false positives and false negatives.
+- **Grouped data**: `glm(cbind(successes, failures) ~ x, family = binomial())`.
+- **Separation**: when x perfectly predicts y, the MLE runs off to infinity ("fitted probabilities numerically 0 or 1 occurred"). Firth's penalised likelihood (`logistf`) gives finite estimates.
+
+`Default` (from `ISLR2`: 10,000 credit-card customers, 3.3% of whom defaulted) is already loaded.
+
+## Explore: thresholds and costs
+
+The model is `default ~ balance + income + student`. Move the threshold and set how much worse a missed default is than a wrongly declined customer.
+
+```{ojs}
+//| echo: false
+viewof th = Inputs.range([0.01, 0.99], {value: 0.5, step: 0.01, label: "Threshold"})
+viewof cost_ratio = Inputs.range([1, 50], {value: 20, step: 1, label: "Cost of a missed default ÷ cost of a false alarm"})
+```
+
+```{webr}
+#| input:
+#|   - th
+#|   - cost_ratio
+#| caption: Threshold explorer
+#| autorun: true
+fit    <- glm(default ~ balance + income + student, family = binomial(), data = Default)
+probs  <- fitted(fit)
+actual <- Default$default == "Yes"
+pred   <- probs > th
+
+tab <- table(Actual = ifelse(actual, "Yes", "No"), Predicted = factor(ifelse(pred, "Yes", "No"), c("No", "Yes")))
+print(tab)
+TP <- sum(actual & pred); FN <- sum(actual & !pred); FP <- sum(!actual & pred); TN <- sum(!actual & !pred)
+cost <- function(t) (cost_ratio * sum(actual & probs <= t) + sum(!actual & probs > t)) / length(actual)
+ts <- seq(0.01, 0.99, by = 0.01)
+cat(sprintf("\nsensitivity %.3f   specificity %.3f   precision %s\nexpected cost per customer (false alarm = 1): %.4f   best threshold on the grid: %.2f\n",
+            TP / (TP + FN), TN / (TN + FP), if (TP + FP) sprintf("%.3f", TP / (TP + FP)) else "NA",
+            cost(th), ts[which.min(sapply(ts, cost))]))
+
+o <- order(probs, decreasing = TRUE)
+roc <- data.frame(fpr = c(0, cumsum(!actual[o]) / sum(!actual)), tpr = c(0, cumsum(actual[o]) / sum(actual)))
+ggplot(roc, aes(fpr, tpr)) +
+  geom_abline(linetype = 2, colour = "grey60") +
+  geom_line(colour = "#3b5a8f", linewidth = 1) +
+  annotate("point", x = FP / (FP + TN), y = TP / (TP + FN), colour = "red", size = 4) +
+  coord_equal() +
+  labs(x = "1 − specificity", y = "Sensitivity", title = "Training-data ROC; red = current threshold")
+```
+
+::: {.small-note}
+At 0.5 the model catches only about a third of defaulters. With a 20:1 cost ratio the cheapest threshold is around 0.05. These are *apparent* (training-data) numbers; in real work you would choose and evaluate the threshold on held-out data.
+:::
+
+## Exercises
+
+### Q1 — Fit and read a logistic regression
+
+Fit `default ~ balance + income + student` and report odds ratios with CIs. Interpret `balance` and `studentYes`.
+
+```{webr}
+#| exercise: m7q1
+fit <- glm(default ~ balance + income + student, family = ______(), data = Default)
+tidy(fit, exponentiate = ______, conf.int = TRUE)
+exp(1000 * coef(fit)["balance"])   # odds ratio for +$1000 of balance
+```
+
+::: {.solution exercise="m7q1"}
+```r
+fit <- glm(default ~ balance + income + student, family = binomial(), data = Default)
+tidy(fit, exponentiate = TRUE, conf.int = TRUE)
+```
+`balance` OR ≈ 1.00575 per dollar: tiny per dollar, but over $1000 the odds multiply by about 310. `studentYes` OR ≈ 0.5: **holding balance and income fixed**, students have lower odds of default, even though the unadjusted association points the other way (students carry bigger balances). Check `table(Default$student, Default$default)` to see the reversal.
+:::
+
+### Q2 — Predicted probability by hand
+
+For a student with balance 2000 and income 40,000: compute η, apply the inverse logit, and check against `predict()`.
+
+```{webr}
+#| exercise: m7q2
+fit <- glm(default ~ balance + income + student, family = binomial(), data = Default)
+b   <- coef(fit)
+eta <- b["(Intercept)"] + b["balance"] * 2000 + b["income"] * 40000 + b["studentYes"] * ______
+1 / (1 + exp(-eta))
+
+predict(fit, newdata = data.frame(balance = 2000, income = 40000, student = "Yes"),
+        type = "______")
+```
+
+::: {.solution exercise="m7q2"}
+```r
+eta <- b["(Intercept)"] + b["balance"] * 2000 + b["income"] * 40000 + b["studentYes"] * 1
+predict(fit, newdata = data.frame(balance = 2000, income = 40000, student = "Yes"), type = "response")
+```
+Both agree to many decimal places.
+:::
+
+### Q3 — ROC and AUC
+
+Compute the AUC, plot the ROC curve, and find the sensitivity at 95% specificity.
+
+```{webr}
+#| exercise: m7q3
+fit <- glm(default ~ balance + income + student, family = binomial(), data = Default)
+probs   <- predict(fit, type = "response")
+roc_obj <- roc(Default$default, probs, quiet = TRUE)
+______(roc_obj)
+plot(roc_obj)
+coords(roc_obj, x = 0.95, input = "______", ret = c("sensitivity", "specificity"))
+```
+
+::: {.solution exercise="m7q3"}
+```r
+auc(roc_obj)
+coords(roc_obj, x = 0.95, input = "specificity", ret = c("sensitivity", "specificity"))
+```
+Apparent AUC ≈ 0.950; at 95% specificity the interpolated sensitivity is about 0.715. Both are optimistic until recomputed on held-out or cross-validated predictions.
+:::
+
+### Q4 — Threshold under asymmetric costs
+
+A missed default costs $10,000; a wrongly declined customer $500. Write the expected cost per customer as a function of the threshold and grid-search it.
+
+```{webr}
+#| exercise: m7q4
+fit    <- glm(default ~ balance + income + student, family = binomial(), data = Default)
+probs  <- predict(fit, type = "response")
+actual <- Default$default == "Yes"
+
+expected_cost <- function(t) {
+  pred <- probs > t
+  fn <- sum(actual & !pred)    # missed defaulters
+  fp <- sum(______)            # false alarms
+  (10000 * fn + 500 * fp) / length(actual)
+}
+ts    <- seq(0.01, 0.99, by = 0.01)
+costs <- sapply(ts, expected_cost)
+ts[which.min(costs)]
+plot(ts, costs, type = "l", xlab = "threshold", ylab = "expected cost per customer ($)")
+```
+
+::: {.solution exercise="m7q4"}
+```r
+fp <- sum(!actual & pred)
+```
+The apparent optimum is about 0.05: a miss costs 20× a false alarm, so the model should flag aggressively. Choose thresholds from explicit costs and calibrated probabilities, then evaluate on validation data.
+:::
+
+### Q5 — Grouped binomial germination experiment
+
+Simulate 50 plots of 20 seeds (control p = 0.4, hormone p = 0.7), fit the grouped GLM, and confirm the long-form (one row per seed) fit gives the same coefficients. The true odds ratio is (0.7/0.3)/(0.4/0.6) = 3.5.
+
+```{webr}
+#| exercise: m7q5
+set.seed(2026)
+germ <- data.frame(treatment = rep(c("control", "hormone"), each = 25),
+                   n_success = c(rbinom(25, 20, 0.4), rbinom(25, 20, 0.7)),
+                   n_total   = 20)
+germ$n_failure <- germ$n_total - germ$n_success
+
+fit_grouped <- glm(cbind(______, ______) ~ treatment, family = binomial(), data = germ)
+tidy(fit_grouped, exponentiate = TRUE, conf.int = TRUE)
+
+germ_long <- germ |>
+  select(treatment, n_success, n_failure) |>
+  pivot_longer(c(n_success, n_failure), names_to = "result", values_to = "count") |>
+  mutate(outcome = ifelse(result == "n_success", 1L, 0L)) |>
+  uncount(count)
+nrow(germ_long)
+fit_long <- glm(outcome ~ treatment, family = binomial(), data = germ_long)
+coef(fit_grouped); coef(fit_long)
+```
+
+::: {.solution exercise="m7q5"}
+```r
+fit_grouped <- glm(cbind(n_success, n_failure) ~ treatment, family = binomial(), data = germ)
+```
+The `treatmenthormone` OR is near 3.5 (a valid 95% CI covers it in about 95% of repeated experiments, not necessarily this one). Grouped and long forms give identical coefficients.
+:::
+
+### Q6 — Separation and Firth's correction
+
+`x` perfectly separates `y`. See what `glm()` does, then fit Firth's penalised model.
+
+```{webr}
+#| exercise: m7q6
+sep_df <- data.frame(x = 1:8, y = c(0, 0, 0, 0, 1, 1, 1, 1))
+
+fit_ml <- glm(y ~ x, family = binomial(), data = sep_df)
+coef(summary(fit_ml))
+
+if (!requireNamespace("logistf", quietly = TRUE)) webr::install("logistf")
+fit_firth <- logistf::______(y ~ x, data = sep_df)
+summary(fit_firth)
+```
+
+::: {.hint exercise="m7q6"}
+The function has the same name as the package: `logistf::logistf()`. The install line fetches it into your browser the first time (it can take a little while).
+:::
+
+::: {.solution exercise="m7q6"}
+```r
+fit_firth <- logistf::logistf(y ~ x, data = sep_df)
+```
+`glm()` warns that fitted probabilities are numerically 0 or 1 and returns an enormous slope with an even more enormous SE: with perfect separation the likelihood keeps increasing as the slope grows, so there is no finite MLE. Firth's penalty (the Jeffreys-prior term) gives a finite, stable estimate. Separation is common with small samples, rare outcomes or many predictors, but can happen at any n.
+:::
+
+## Mini-project
+
+On `Default`: the full model's OR table with a sentence per coefficient, ROC and AUC, a threshold from your own defended cost ratio, the confusion matrix at that threshold with sensitivity, specificity and precision, and a paragraph for a non-technical stakeholder. Bonus: split into training and test halves first and report test-set performance.
+
+```{webr}
+#| caption: Sandbox
+set.seed(1)
+train <- sample(nrow(Default), nrow(Default) / 2)
+# your code here
+```

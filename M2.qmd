@@ -1,0 +1,274 @@
+---
+title: "2 · Distributions and simulation"
+subtitle: "d/p/q/r functions, sampling distributions, the CLT, the bootstrap and Type I error"
+webr:
+  resources:
+    - data
+  cell-options:
+    fig-width: 7
+    fig-height: 4.2
+    timelimit: 180
+    persist: true
+  packages:
+    - MASS
+    - dplyr
+    - ggplot2
+    - palmerpenguins
+---
+
+{{< include _extensions/live/_knitr.qmd >}}
+{{< include _setup.qmd >}}
+
+Every test statistic, p-value, standard error and confidence interval in this course rests on one idea: the **sampling distribution**. Simulating it beats memorising it.
+
+| Prefix | Meaning | Example |
+|---|---|---|
+| `d` | density / mass: height of the pdf or pmf | `dnorm(0)` ≈ 0.399 |
+| `p` | probability: the CDF, P(X ≤ q) | `pnorm(1.96)` ≈ 0.975 |
+| `q` | quantile: the inverse CDF | `qnorm(0.975)` ≈ 1.96 |
+| `r` | random draws | `rnorm(5)` |
+
+The same four prefixes work for `binom`, `pois`, `exp`, `t`, `chisq`, `f`, `beta`, `gamma`, `unif`, …
+
+- **Population distribution**: the mechanism generating data, e.g. `rnorm(n, mu, sigma)`.
+- **Sample**: one realised dataset from it.
+- **Sampling distribution**: the distribution of a *statistic* over repeated samples. The **standard error is its SD**, nothing more: `sd(replicate(10000, mean(rnorm(30))))`.
+- **Bootstrap**: when you can't derive the sampling distribution, resample your data with replacement and recompute the statistic many times.
+
+```{webr}
+#| caption: Try the d/p/q/r functions
+qnorm(0.975)                 # critical value for a two-sided 5% z-test
+qt(0.975, df = 20)           # heavier tails at low df
+2 * (1 - pnorm(abs(2.3)))    # two-sided p for z = 2.3
+dbinom(3, size = 10, prob = 0.5)
+table(rpois(1000, lambda = 3))
+```
+
+## Explore: the Central Limit Theorem
+
+Draw 5000 samples of size *n* from a population and look at the distribution of the 5000 sample means. The red curve is the Normal the CLT promises.
+
+```{ojs}
+//| echo: false
+viewof clt_dist = Inputs.select(["Exponential (skewed)", "Log-normal (very skewed)", "Uniform", "Normal", "Poisson(1) (discrete)"], {value: "Exponential (skewed)", label: "Population"})
+viewof clt_n = Inputs.range([1, 200], {value: 5, step: 1, label: "Sample size n"})
+```
+
+```{webr}
+#| input:
+#|   - clt_dist
+#|   - clt_n
+#| caption: CLT explorer (5000 samples)
+#| autorun: true
+set.seed(2026)
+gen <- switch(clt_dist,
+  "Exponential (skewed)"      = function(n) rexp(n, 1),
+  "Log-normal (very skewed)"  = function(n) rlnorm(n, 0, 1),
+  "Uniform"                   = function(n) runif(n),
+  "Normal"                    = function(n) rnorm(n),
+  "Poisson(1) (discrete)"     = function(n) rpois(n, 1))
+mu <- switch(clt_dist, "Exponential (skewed)" = 1, "Log-normal (very skewed)" = exp(0.5),
+             "Uniform" = 0.5, "Normal" = 0, "Poisson(1) (discrete)" = 1)
+sg <- switch(clt_dist, "Exponential (skewed)" = 1, "Log-normal (very skewed)" = sqrt((exp(1) - 1) * exp(1)),
+             "Uniform" = sqrt(1 / 12), "Normal" = 1, "Poisson(1) (discrete)" = 1)
+
+means <- replicate(5000, mean(gen(clt_n)))
+se    <- sg / sqrt(clt_n)
+xs    <- seq(min(means), max(means), length.out = 300)
+
+ggplot(data.frame(m = means), aes(m)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 60, fill = "grey70") +
+  geom_line(data = data.frame(x = xs, y = dnorm(xs, mu, se)), aes(x, y), colour = "red") +
+  labs(x = "Sample mean", y = "Density",
+       title = sprintf("n = %d   SD of means = %.3f   theory sigma/sqrt(n) = %.3f",
+                       clt_n, sd(means), se))
+```
+
+::: {.small-note}
+Uniform data look Normal by n ≈ 5. The exponential needs n ≈ 30–100, and the log-normal still shows right skew at n = 100. "n > 30 is enough" is a rule of thumb for mild skew, not a law, which is a good argument for always plotting your data first.
+:::
+
+## Explore: does the t-test keep its promise?
+
+Both groups come from populations with the **same mean**, so every rejection is a false positive and a valid 5% test should reject 5% of the time. Make the variances and the group sizes unequal and compare Student's t-test with Welch's.
+
+```{ojs}
+//| echo: false
+viewof t_n1 = Inputs.range([3, 60], {value: 10, step: 1, label: "n in group 1"})
+viewof t_n2 = Inputs.range([3, 60], {value: 40, step: 1, label: "n in group 2"})
+viewof t_sd1 = Inputs.range([0.25, 6], {value: 4, step: 0.25, label: "SD of group 1 (group 2 SD = 1)"})
+```
+
+```{webr}
+#| input:
+#|   - t_n1
+#|   - t_n2
+#|   - t_sd1
+#| caption: Type I error simulator (2000 null experiments)
+#| autorun: true
+set.seed(1)
+p <- replicate(2000, {
+  x <- rnorm(t_n1, 0, t_sd1); y <- rnorm(t_n2, 0, 1)
+  c(Student = t.test(x, y, var.equal = TRUE)$p.value,
+    Welch   = t.test(x, y)$p.value)
+})
+round(100 * rowMeans(p < 0.05), 1)   # % false positives; should be about 5
+```
+
+::: {.small-note}
+With equal n, Student's test is fairly robust. When the *smaller* group has the *larger* variance, Student's false-positive rate shoots well above 5%; flip it and the test becomes very conservative. Welch's stays near 5% throughout, which is why R uses it by default.
+:::
+
+## Exercises
+
+### Q1 — CLT by simulation
+
+Simulate 10,000 means of samples of size 5, 30 and 100 from `rexp(rate = 1)` and overlay the Normal(1, 1/√n). At what n would you be comfortable using a t-test on data this skewed?
+
+```{webr}
+#| exercise: m2q1
+#| fig-height: 3.5
+set.seed(2026)
+simulate_means <- function(n, reps = 10000) {
+  data.frame(n = n, mean = replicate(reps, mean(rexp(______, rate = 1))))
+}
+sims <- bind_rows(simulate_means(5), simulate_means(30), simulate_means(100))
+
+curves <- do.call(rbind, lapply(c(5, 30, 100), function(n) {
+  x <- seq(max(0, 1 - 4 / sqrt(n)), 1 + 4 / sqrt(n), length.out = 400)
+  data.frame(n = n, x = x, density = dnorm(x, mean = 1, sd = ______))
+}))
+
+ggplot(sims, aes(mean)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 60, alpha = 0.6) +
+  geom_line(data = curves, aes(x, density), colour = "red") +
+  facet_wrap(~ n, scales = "free", labeller = label_both)
+```
+
+::: {.hint exercise="m2q1"}
+Each sample has size `n`; the theoretical SD of the mean is `1 / sqrt(n)`.
+:::
+
+::: {.solution exercise="m2q1"}
+```r
+data.frame(n = n, mean = replicate(reps, mean(rexp(n, rate = 1))))
+dnorm(x, mean = 1, sd = 1 / sqrt(n))
+```
+At n = 5 the sampling distribution is still clearly right-skewed; at n = 30 it's fairly symmetric but the left tail is short; at n = 100 it's hard to tell from the Normal. "n > 30" is fine for mild skew but marginal for exponential-like data.
+:::
+
+### Q2 — Standard error, three ways
+
+Estimate the SE of the mean of `x` by formula, by simulating from the known population, and by bootstrapping `x`. Why does the bootstrap work when you *don't* know the population?
+
+```{webr}
+#| exercise: m2q2
+set.seed(2026)
+x <- rnorm(50, mean = 10, sd = 3)
+
+se_formula <- sd(x) / sqrt(______)
+se_sim     <- sd(replicate(10000, mean(rnorm(50, 10, 3))))
+se_boot    <- sd(replicate(10000, mean(sample(x, replace = ______))))
+
+c(formula = se_formula, sim = se_sim, bootstrap = se_boot)
+```
+
+::: {.solution exercise="m2q2"}
+```r
+se_formula <- sd(x) / sqrt(length(x))
+se_boot    <- sd(replicate(10000, mean(sample(x, replace = TRUE))))
+```
+All three are ≈ 0.42 (= 3/√50). The sample is our best estimate of the population, so resampling it with replacement mimics drawing new samples from the population.
+:::
+
+### Q3 — Bootstrap CI for a median
+
+Compute a 95% percentile bootstrap CI for the median `body_mass_g` of Gentoo penguins (5000 resamples) and compare it with a naive `median ± 1.96 × bootstrap SE`.
+
+```{webr}
+#| exercise: m2q3
+set.seed(2026)
+gentoo <- penguins |>
+  filter(species == "Gentoo", !is.na(body_mass_g)) |>
+  pull(body_mass_g)
+
+boot_medians <- replicate(5000, ______(sample(gentoo, replace = TRUE)))
+
+ci_pct  <- quantile(boot_medians, c(______, ______))
+ci_norm <- median(gentoo) + c(-1, 1) * 1.96 * sd(boot_medians)
+
+list(observed_median = median(gentoo), percentile_CI = ci_pct, normal_CI = ci_norm)
+hist(boot_medians, breaks = 40)
+```
+
+::: {.solution exercise="m2q3"}
+```r
+boot_medians <- replicate(5000, median(sample(gentoo, replace = TRUE)))
+ci_pct <- quantile(boot_medians, c(0.025, 0.975))
+```
+The histogram shows why the percentile interval is preferable to the naive Normal one: the bootstrap distribution of a median is lumpy and can be asymmetric, and the Normal interval assumes symmetry. The percentile method is not universally best; BCa or bootstrap-*t* intervals often cover better in small or skewed samples.
+:::
+
+### Q4 — Type I error, empirically
+
+Simulate 10,000 null two-sample t-tests. (1) What fraction has p < 0.05? (2) What shape is the p-value histogram? (3) With SDs 1 vs 4 and `n1 = 10, n2 = 40`, what happens to Student's test? (4) Does Welch's fix it?
+
+```{webr}
+#| exercise: m2q4
+set.seed(2026)
+one_pvalue <- function(n1 = 20, n2 = 20, sd1 = 1, sd2 = 1, var.equal = FALSE) {
+  x <- rnorm(n1, 0, sd1)
+  y <- rnorm(n2, 0, sd2)
+  t.test(x, y, var.equal = var.equal)$p.value
+}
+
+p_null <- replicate(10000, one_pvalue())
+mean(p_null < 0.05)
+hist(p_null, breaks = 40)
+
+p_student <- replicate(10000, one_pvalue(n1 = 10, n2 = 40, sd1 = 4, sd2 = 1, var.equal = ______))
+p_welch   <- replicate(10000, one_pvalue(n1 = 10, n2 = 40, sd1 = 4, sd2 = 1, var.equal = ______))
+c(student = mean(p_student < 0.05), welch = mean(p_welch < 0.05))
+```
+
+::: {.solution exercise="m2q4"}
+```r
+p_student <- replicate(10000, one_pvalue(n1 = 10, n2 = 40, sd1 = 4, sd2 = 1, var.equal = TRUE))
+p_welch   <- replicate(10000, one_pvalue(n1 = 10, n2 = 40, sd1 = 4, sd2 = 1, var.equal = FALSE))
+```
+- Null, equal variances: ≈ 5% rejections and a **flat** p-value histogram. For an exact continuous test under a simple null, p-values are Uniform(0, 1).
+- Student's with the small group having the large SD: about 30%, six times the nominal rate. Swap which group is bigger and it drops far below 5%.
+- Welch's: ≈ 5% in every scenario.
+
+This is how to check any test or model: simulate under the null and look at calibration.
+:::
+
+### Q5 — Power by simulation
+
+Simulate the power of a two-sample t-test with n = 20 per group and Cohen's d = 0.5, and check it against `power.t.test()`.
+
+```{webr}
+#| exercise: m2q5
+set.seed(2026)
+pow_sim <- mean(replicate(10000, {
+  t.test(rnorm(20, 0, 1), rnorm(20, ______, 1))$p.value < 0.05
+}))
+pow_sim
+power.t.test(n = 20, delta = 0.5, sd = 1, sig.level = 0.05)$power
+```
+
+::: {.solution exercise="m2q5"}
+```r
+t.test(rnorm(20, 0, 1), rnorm(20, 0.5, 1))$p.value < 0.05
+```
+Both give ≈ 0.34: a study this size catches a medium effect only about a third of the time. A prospective power analysis is just this simulation done before collecting data, and it works for any design.
+:::
+
+## Mini-project
+
+Collect the three CLT panels with your "at what n" answer, the three SE estimates, the bootstrap vs Normal CI, and a table of Type I error rates across four scenarios (equal/unequal variance × Student/Welch), then write up `module_02_report.qmd` locally.
+
+```{webr}
+#| caption: Sandbox
+# your code here
+```

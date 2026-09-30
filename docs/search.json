@@ -1,0 +1,352 @@
+[
+  {
+    "objectID": "M9.html",
+    "href": "M9.html",
+    "title": "9 · Capstone",
+    "section": "",
+    "text": "Course data (loads automatically; click to see the code)\n\n\n\n\n\nR runs inside your browser. The first visit downloads R and the packages, which takes 20–40 seconds; after that the browser caches them. Wait for this block to finish before running exercises.\nThe paths, working guidelines and rubric are in the Obsidian note. This page gives you a workspace with everything loaded and a starting template for each path.\nWrite your analysis plan (model, contrasts, multiplicity, exclusions) before you run anything below."
+  },
+  {
+    "objectID": "M9.html#path-a-template-western-blot",
+    "href": "M9.html#path-a-template-western-blot",
+    "title": "9 · Capstone",
+    "section": "Path A template: western blot",
+    "text": "Path A template: western blot\nRuns on the included CSV. To use your own data, paste it in as a data frame with the same columns (Genotype, Bio_Rep, Tech_Rep, Target_Intensity, Loading_Control_Intensity)."
+  },
+  {
+    "objectID": "M9.html#path-b-template-held-out-logistic-regression",
+    "href": "M9.html#path-b-template-held-out-logistic-regression",
+    "title": "9 · Capstone",
+    "section": "Path B template: held-out logistic regression",
+    "text": "Path B template: held-out logistic regression"
+  },
+  {
+    "objectID": "M9.html#path-c-explore-separation-before-you-simulate-properly",
+    "href": "M9.html#path-c-explore-separation-before-you-simulate-properly",
+    "title": "9 · Capstone",
+    "section": "Path C: explore separation before you simulate properly",
+    "text": "Path C: explore separation before you simulate properly\nn = 20 observations and one binary predictor with true log-odds ratio β. Watch how often the ordinary MLE “escapes” (|β̂| &gt; 10) as β grows. The full study also fits logistf and tracks coverage; start from the workspace below.\n\nviewof sep_beta = Inputs.range([0, 5], {value: 2, step: 0.25, label: \"True β\"})\nviewof sep_n = Inputs.range([10, 100], {value: 20, step: 2, label: \"n\"})"
+  },
+  {
+    "objectID": "M9.html#your-workspace",
+    "href": "M9.html#your-workspace",
+    "title": "9 · Capstone",
+    "section": "Your workspace",
+    "text": "Your workspace"
+  },
+  {
+    "objectID": "M9.html#after-the-capstone",
+    "href": "M9.html#after-the-capstone",
+    "title": "9 · Capstone",
+    "section": "After the capstone",
+    "text": "After the capstone\nYou now have a workflow for the four biggest situations in applied research: continuous outcomes and group differences (Modules 3–4), binary outcomes (Module 7), counts with varying exposure (Module 8), and non-independent observations (the mixed-models part of Module 8). For what’s not covered: survival analysis (survival), Bayesian regression (rstanarm, Regression and Other Stories), and multiple testing / FDR (p.adjust(method = \"BH\"))."
+  },
+  {
+    "objectID": "M7.html",
+    "href": "M7.html",
+    "title": "7 · Logistic regression",
+    "section": "",
+    "text": "Course data (loads automatically; click to see the code)\n\n\n\n\n\nR runs inside your browser. The first visit downloads R and the packages, which takes 20–40 seconds; after that the browser caches them. Wait for this block to finish before running exercises.\n\\[\\log\\left(\\frac{p}{1-p}\\right) = \\beta_0 + \\beta_1 x_1 + \\dots \\qquad p = \\frac{1}{1 + e^{-\\eta}}\\]\nDefault (from ISLR2: 10,000 credit-card customers, 3.3% of whom defaulted) is already loaded."
+  },
+  {
+    "objectID": "M7.html#explore-thresholds-and-costs",
+    "href": "M7.html#explore-thresholds-and-costs",
+    "title": "7 · Logistic regression",
+    "section": "Explore: thresholds and costs",
+    "text": "Explore: thresholds and costs\nThe model is default ~ balance + income + student. Move the threshold and set how much worse a missed default is than a wrongly declined customer.\n\nviewof th = Inputs.range([0.01, 0.99], {value: 0.5, step: 0.01, label: \"Threshold\"})\nviewof cost_ratio = Inputs.range([1, 50], {value: 20, step: 1, label: \"Cost of a missed default ÷ cost of a false alarm\"})\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nAt 0.5 the model catches only about a third of defaulters. With a 20:1 cost ratio the cheapest threshold is around 0.05. These are apparent (training-data) numbers; in real work you would choose and evaluate the threshold on held-out data."
+  },
+  {
+    "objectID": "M7.html#exercises",
+    "href": "M7.html#exercises",
+    "title": "7 · Logistic regression",
+    "section": "Exercises",
+    "text": "Exercises\n\nQ1 — Fit and read a logistic regression\nFit default ~ balance + income + student and report odds ratios with CIs. Interpret balance and studentYes.\n\n\n\n\n\n\n\n\n\nfit &lt;- glm(default ~ balance + income + student, family = binomial(), data = Default)\ntidy(fit, exponentiate = TRUE, conf.int = TRUE)\nbalance OR ≈ 1.00575 per dollar: tiny per dollar, but over \\(1000 the odds multiply by about 310. `studentYes` OR ≈ 0.5: **holding balance and income fixed**, students have lower odds of default, even though the unadjusted association points the other way (students carry bigger balances). Check `table(Default\\)student, Default$default)` to see the reversal.\n\n\n\nQ2 — Predicted probability by hand\nFor a student with balance 2000 and income 40,000: compute η, apply the inverse logit, and check against predict().\n\n\n\n\n\n\n\n\n\neta &lt;- b[\"(Intercept)\"] + b[\"balance\"] * 2000 + b[\"income\"] * 40000 + b[\"studentYes\"] * 1\npredict(fit, newdata = data.frame(balance = 2000, income = 40000, student = \"Yes\"), type = \"response\")\nBoth agree to many decimal places.\n\n\n\nQ3 — ROC and AUC\nCompute the AUC, plot the ROC curve, and find the sensitivity at 95% specificity.\n\n\n\n\n\n\n\n\n\nauc(roc_obj)\ncoords(roc_obj, x = 0.95, input = \"specificity\", ret = c(\"sensitivity\", \"specificity\"))\nApparent AUC ≈ 0.950; at 95% specificity the interpolated sensitivity is about 0.715. Both are optimistic until recomputed on held-out or cross-validated predictions.\n\n\n\nQ4 — Threshold under asymmetric costs\nA missed default costs $10,000; a wrongly declined customer $500. Write the expected cost per customer as a function of the threshold and grid-search it.\n\n\n\n\n\n\n\n\n\nfp &lt;- sum(!actual & pred)\nThe apparent optimum is about 0.05: a miss costs 20× a false alarm, so the model should flag aggressively. Choose thresholds from explicit costs and calibrated probabilities, then evaluate on validation data.\n\n\n\nQ5 — Grouped binomial germination experiment\nSimulate 50 plots of 20 seeds (control p = 0.4, hormone p = 0.7), fit the grouped GLM, and confirm the long-form (one row per seed) fit gives the same coefficients. The true odds ratio is (0.7/0.3)/(0.4/0.6) = 3.5.\n\n\n\n\n\n\n\n\n\nfit_grouped &lt;- glm(cbind(n_success, n_failure) ~ treatment, family = binomial(), data = germ)\nThe treatmenthormone OR is near 3.5 (a valid 95% CI covers it in about 95% of repeated experiments, not necessarily this one). Grouped and long forms give identical coefficients.\n\n\n\nQ6 — Separation and Firth’s correction\nx perfectly separates y. See what glm() does, then fit Firth’s penalised model.\n\n\n\n\n\n\n\n\n\nThe function has the same name as the package: logistf::logistf(). The install line fetches it into your browser the first time (it can take a little while).\n\n\nfit_firth &lt;- logistf::logistf(y ~ x, data = sep_df)\nglm() warns that fitted probabilities are numerically 0 or 1 and returns an enormous slope with an even more enormous SE: with perfect separation the likelihood keeps increasing as the slope grows, so there is no finite MLE. Firth’s penalty (the Jeffreys-prior term) gives a finite, stable estimate. Separation is common with small samples, rare outcomes or many predictors, but can happen at any n."
+  },
+  {
+    "objectID": "M7.html#mini-project",
+    "href": "M7.html#mini-project",
+    "title": "7 · Logistic regression",
+    "section": "Mini-project",
+    "text": "Mini-project\nOn Default: the full model’s OR table with a sentence per coefficient, ROC and AUC, a threshold from your own defended cost ratio, the confusion matrix at that threshold with sensitivity, specificity and precision, and a paragraph for a non-technical stakeholder. Bonus: split into training and test halves first and report test-set performance."
+  },
+  {
+    "objectID": "M5.html",
+    "href": "M5.html",
+    "title": "5 · Regression diagnostics",
+    "section": "",
+    "text": "Course data (loads automatically; click to see the code)\n\n\n\n\n\nR runs inside your browser. The first visit downloads R and the packages, which takes 20–40 seconds; after that the browser caches them. Wait for this block to finish before running exercises.\nEveryone shows their p-values; almost nobody shows their diagnostics. The assumptions of a linear model, from hardest to fix to least critical:\nLeverage is how unusual a point’s predictors are (hatvalues); the residual is how far it is from the line; influence (Cook’s distance) combines both: how much the fit changes without that point. VIF measures how much collinearity inflates a coefficient’s variance; above 10 deserves a look, but never drop a needed confounder just to lower it. For heteroscedasticity: transform (log for positive, order-of-magnitude data), use robust HC3 standard errors, or model the variance."
+  },
+  {
+    "objectID": "M5.html#explore-one-point-three-ideas",
+    "href": "M5.html#explore-one-point-three-ideas",
+    "title": "5 · Regression diagnostics",
+    "section": "Explore: one point, three ideas",
+    "text": "Explore: one point, three ideas\nTwenty well-behaved points plus one red point you control. Watch the difference between leverage (far out in x), a large residual (far from the line) and influence (both at once).\n\nviewof inf_x = Inputs.range([0, 30], {value: 5, step: 0.5, label: \"Red point: x\"})\nviewof inf_y = Inputs.range([-10, 30], {value: 5, step: 0.5, label: \"Red point: y\"})\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nMove x to 28 with y on the dashed line (about 17): huge leverage, tiny residual, little influence. Then drop y to 0: the same leverage now drags the whole line, and Cook’s D explodes. A point in the middle of x with a big residual barely moves the slope."
+  },
+  {
+    "objectID": "M5.html#exercises",
+    "href": "M5.html#exercises",
+    "title": "5 · Regression diagnostics",
+    "section": "Exercises",
+    "text": "Exercises\n\nQ1 — Read the four plots\nFit mpg ~ wt + hp and write one sentence per panel.\n\n\n\n\n\n\n\n\n\npar(mfrow = c(2, 2)); plot(fit); par(mfrow = c(1, 1))\n\nResiduals vs Fitted: mild curvature, suggesting some nonlinearity in wt or hp. Not severe.\nQ-Q: mostly on the line, with a couple of high outliers (Toyota Corolla, Fiat 128).\nScale-Location: slight upward trend, a hint of heteroscedasticity.\nResiduals vs Leverage: the Chrysler Imperial combines high leverage with a sizeable residual. Check whether it changes conclusions.\n\n\n\n\nQ2 — Hunt down influential points\nFlag observations with Cook’s D &gt; 4/n, refit without them and compare coefficients. Should you drop them?\n\n\n\n\n\n\n\n\n\ncd &lt;- cooks.distance(fit)\nThe flagged cars include the Corolla (very high mpg for its weight) and the Chrysler Imperial (heavy and thirsty); the wt slope shifts when they’re removed. Never drop points to improve p-values. Drop them only for a substantive reason (measurement error, wrong population, coding error); otherwise report both fits as a sensitivity analysis.\n\n\n\nQ3 — VIF\nFit mpg ~ ., find the VIF offenders, and drop the largest one at a time until everything is below 5.\n\n\n\n\n\n\n\n\n\nstep1 &lt;- update(full, . ~ . - disp); vif(step1)\nstep2 &lt;- update(step1, . ~ . - cyl); vif(step2)\nstep3 &lt;- update(step2, . ~ . - wt);  vif(step3)   # hp still just above 5\nstep4 &lt;- update(step3, . ~ . - hp);  vif(step4)   # all below 5\ndisp (≈ 21.6), cyl (≈ 15.4) and wt (≈ 15.2) start above 10, hp just below. This mechanical sequence is not a model-building recipe: keep the variables your scientific question needs, because dropping a confounder biases the others.\n\n\n\nQ4 — When to log-transform\nCompare price ~ carat with log(price) ~ log(carat) on the diamonds data, and interpret the log-log slope.\n\n\n\n\n\n\n\n\n\nfit2 &lt;- lm(log(price) ~ log(carat), data = ggplot2::diamonds)\nThe raw fit has an obvious funnel; the log-log fit is much more even. The slope ≈ 1.68 is an elasticity: a 1% increase in carat is associated with about a 1.68% increase in price. The log transform linearises the curve and stabilises the variance in one move.\n\n\n\nQ5 — Western blot diagnostics revisited\nCompare diagnostics for the raw and log-scale blot ANOVAs and check that the Dunnett conclusion survives on the log scale.\n\n\n\n\n\n\n\n\n\nsummary(multcomp::glht(aov(log(Ratio) ~ Genotype, data = blot_bio),\n                       linfct = multcomp::mcp(Genotype = \"Dunnett\")))\nWith n = 4 per group both scales look reasonable (Shapiro–Wilk p ≈ 0.77 raw, ≈ 0.90 log); these low-power tests can’t prove normality, so the plots matter more. Both scales agree on KO vs WT, with a KO/WT geometric-mean ratio of exp(-0.84) ≈ 0.43.\n\n\n\nQ6 — Robust standard errors\nKeep price ~ carat on the natural scale, but get HC3 robust SEs.\n\n\n\n\n\n\n\n\n\ncoeftest(fit, vcov = vcovHC(fit, type = \"HC3\"))\nThe estimates are identical (robust SEs don’t change point estimates), but the carat SE grows substantially: the naive SE assumed constant variance. The effect is so large that p stays tiny, but the inflation would matter for a subtler effect."
+  },
+  {
+    "objectID": "M5.html#mini-project",
+    "href": "M5.html#mini-project",
+    "title": "5 · Regression diagnostics",
+    "section": "Mini-project",
+    "text": "Mini-project\nTake your Module 4 penguin model and write up its diagnostics: the four plots with a sentence each, Cook’s distance and a sensitivity refit, a VIF table, Shapiro–Wilk with a comment on whether normality matters at this n, car::ncvTest(fit), and a paragraph defending the model to a reviewer."
+  },
+  {
+    "objectID": "M3.html",
+    "href": "M3.html",
+    "title": "3 · Classical inference",
+    "section": "",
+    "text": "Course data (loads automatically; click to see the code)\n\n\n\n\n\nR runs inside your browser. The first visit downloads R and the packages, which takes 20–40 seconds; after that the browser caches them. Wait for this block to finish before running exercises.\nThis module uses your western blot workflow as the running example. blot_bio (16 rows, one per biological replicate, technical replicates averaged, WT as reference) is already loaded, exactly as you built it in Module 1 Q5.\nWhich t-test? One group vs a value → t.test(x, mu = value). Two independent groups → Welch’s (t.test(x, y), R’s default). Same subjects measured twice → t.test(x, y, paired = TRUE). Default to Welch’s: it costs almost nothing when variances are equal and saves you when they aren’t (Module 2).\nANOVA is a linear model with a categorical predictor. aov(Ratio ~ Genotype) and anova(lm(Ratio ~ Genotype)) give the same F and p, and the GenotypeKO coefficient is literally mean(KO) − mean(WT).\nAssumptions, in order of how much they hurt:\nFormal tests (shapiro.test, car::leveneTest) have little power at n = 4 per group: a large p is not evidence the assumption holds, so look at the plots too. When assumptions fail: log-transform (multiplicative biology), Welch’s ANOVA (oneway.test), or Kruskal–Wallis."
+  },
+  {
+    "objectID": "M3.html#explore-technical-replicates-are-not-n",
+    "href": "M3.html#explore-technical-replicates-are-not-n",
+    "title": "3 · Classical inference",
+    "section": "Explore: technical replicates are not n",
+    "text": "Explore: technical replicates are not n\nEach simulated experiment compares two genotypes with no true difference. The “tech reps as n” test treats every lane as independent; the “average first” test uses one value per biological replicate. The ICC is how much of the variation sits between biological replicates rather than between technical repeats of the same sample.\n\nviewof b_bio = Inputs.range([2, 10], {value: 4, step: 1, label: \"Biological reps per genotype\"})\nviewof b_tech = Inputs.range([1, 8], {value: 3, step: 1, label: \"Technical reps per biological rep\"})\nviewof b_icc = Inputs.range([0, 0.99], {value: 0.89, step: 0.01, label: \"ICC (between-bio-rep share of variance)\"})\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nThe default ICC (0.89) is what Module 8 estimates for the included blot data. With 3 technical replicates the “tech reps as n” test gives false positives several times more often than 5%. Adding technical replicates makes it worse, while adding biological replicates is the only thing that buys real information."
+  },
+  {
+    "objectID": "M3.html#exercises",
+    "href": "M3.html#exercises",
+    "title": "3 · Classical inference",
+    "section": "Exercises",
+    "text": "Exercises\n\nQ1 — WT vs KO, three ways\nSubset to WT and KO, then run Welch’s t-test, Student’s t-test and a one-way ANOVA. Which two p-values are identical, and why?\n\n\n\n\n\n\n\n\n\ndroplevels() removes the unused HET and RESCUE levels, otherwise downstream tools may complain. Student’s is var.equal = TRUE.\n\n\ntwo_groups &lt;- blot_bio |&gt;\n  filter(Genotype %in% c(\"WT\", \"KO\")) |&gt;\n  mutate(Genotype = droplevels(Genotype))\nt.test(Ratio ~ Genotype, data = two_groups, var.equal = TRUE)\nStudent’s t and the two-group ANOVA give exactly the same p-value because F = t² with two groups. Welch’s differs slightly because it adjusts the degrees of freedom. The effect is huge (KO mean ≈ 43% of WT), so all three are highly significant.\n\n\n\nQ2 — One-way ANOVA on all four genotypes\nFit the ANOVA with aov() and with lm() + anova(), confirm F and p match, and interpret each lm() coefficient in the data’s units.\n\n\n\n\n\n\n\n\n\nlm_fit &lt;- lm(Ratio ~ Genotype, data = blot_bio)\nanova(lm_fit)\nWith WT as the reference: (Intercept) = mean(WT); GenotypeHET = mean(HET) − mean(WT), negative (HET is intermediate); GenotypeKO = mean(KO) − mean(WT), strongly negative; GenotypeRESCUE = mean(RESCUE) − mean(WT), near zero (the rescue worked). F-test p &lt; 0.001: someone differs, and Q3 says who.\n\n\n\nQ3 — Tukey vs Dunnett\nRun Tukey HSD (all 6 pairs) and Dunnett (3 comparisons vs WT). Compare the adjusted p-value for KO − WT. Which would you report when WT is the natural baseline?\n\n\n\n\n\n\n\n\n\ndunnett &lt;- multcomp::glht(aov_fit, linfct = multcomp::mcp(Genotype = \"Dunnett\"))\nDunnett’s adjusted p for KO − WT is smaller than Tukey’s: it protects 3 control comparisons rather than 6 pairwise ones. For “did each genotype differ from WT?” report Dunnett; for “which genotypes differ from each other?” report Tukey. Never run both and pick the more significant one.\n\n\n\nQ4 — Assumption checks and a log transform\nLook at the residual plots and formal tests for the raw-scale model, refit on the log scale, and back-transform the GenotypeKO coefficient into “KO is X% of WT”.\n\n\n\n\n\n\n\n\n\nModel log(Ratio), then exp() the coefficient: a difference of logs is the log of a ratio.\n\n\nlm_log &lt;- lm(log(Ratio) ~ Genotype, data = blot_bio)\nexp(coef(lm_log)[\"GenotypeKO\"])\nGenotypeKO ≈ −0.84 and exp(-0.84) ≈ 0.43: the KO geometric mean is about 43% of WT (a 57% reduction). For this dataset both raw- and log-scale diagnostics are reasonable. For strictly positive ratios spanning an order of magnitude, the log scale is often the natural one.\n\n\n\nQ5 — Two-way ANOVA with ToothGrowth\nGuinea-pig tooth growth by supplement (OJ vs VC) and dose. Fit the additive and interaction models, draw an interaction plot, and get the supplement contrast within each dose.\n\n\n\n\n\n\n\n\n\nfit_int &lt;- lm(len ~ supp * dose, data = tg)\nemmeans(fit_int, pairwise ~ supp | dose)\nInteraction p ≈ 0.02. OJ beats VC at 0.5 and 1 mg, but the two converge at 2 mg. In the interaction model the suppVC coefficient is the contrast at the reference dose (0.5 mg) only, so reporting it as “the supplement effect” would be misleading; report the within-dose contrasts.\n\n\n\nQ6 — χ² test of independence\nCollapse HairEyeColor over sex, test independence, and find which cells drive the association.\n\n\n\n\n\n\n\n\n\nround(res$stdres, 2)\nχ² ≈ 138.3 on 9 df, p &lt; 2.2×10⁻¹⁶. Blond+Blue and Black+Brown are over-represented; Blond+Brown and Black+Blue under-represented. All expected counts exceed 7.6, so the χ² approximation is fine; for sparse tables use fisher.test() or chisq.test(simulate.p.value = TRUE).\n\n\n\nQ7 — Pearson vs Spearman\nCorrelate hp and mpg both ways, then corrupt one value and repeat.\n\n\n\n\n\n\n\n\n\nWith mtcars2[1, \"hp\"] &lt;- 2000, Pearson moves from about −0.78 to −0.13, while Spearman only moves from about −0.89 to −0.83: ranks barely care about the size of an extreme value. Investigate outliers rather than switching methods to make them disappear."
+  },
+  {
+    "objectID": "M3.html#mini-project",
+    "href": "M3.html#mini-project",
+    "title": "3 · Classical inference",
+    "section": "Mini-project",
+    "text": "Mini-project\nProduce the publishable blot analysis: the Module 1 dot plot with Dunnett significance annotations, a stats paragraph (“Band intensity, normalized to loading control, differed among genotypes (one-way ANOVA, F(3, 12) = …”), a methods paragraph, and an assumption-check appendix with the log-scale sensitivity refit."
+  },
+  {
+    "objectID": "M1.html",
+    "href": "M1.html",
+    "title": "1 · R foundations",
+    "section": "",
+    "text": "Course data (loads automatically; click to see the code)\n\n\n\n\n\nR runs inside your browser. The first visit downloads R and the packages, which takes 20–40 seconds; after that the browser caches them. Wait for this block to finish before running exercises.\nAlmost everything in applied statistics in R starts by getting your data into a tidy data frame: one row per observation, one column per variable. Get that right and most of the ecosystem “just works”."
+  },
+  {
+    "objectID": "M1.html#explore-build-a-penguin-plot",
+    "href": "M1.html#explore-build-a-penguin-plot",
+    "title": "1 · R foundations",
+    "section": "Explore: build a penguin plot",
+    "text": "Explore: build a penguin plot\nPick the variables and the grouping. The box prints the ggplot2 code for the plot it drew, so you can copy it.\n\nvars = [\"flipper_length_mm\", \"bill_length_mm\", \"bill_depth_mm\", \"body_mass_g\"]\ngroups = [\"none\", \"species\", \"sex\", \"island\"]\nviewof m1_x = Inputs.select(vars, {value: \"flipper_length_mm\", label: \"x\"})\nviewof m1_y = Inputs.select(vars, {value: \"body_mass_g\", label: \"y\"})\nviewof m1_col = Inputs.select(groups, {value: \"species\", label: \"Colour by\"})\nviewof m1_facet = Inputs.select(groups, {value: \"none\", label: \"Facet by\"})\nviewof m1_smooth = Inputs.toggle({label: \"Linear smoother\", value: true})\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nStart with flipper length vs body mass, no colour: one steep line. Colour by species: each species’ slope is shallower than the pooled one. Species differ in both variables, so pooling exaggerates the slope, which is the intuition behind adjusted associations in Module 4."
+  },
+  {
+    "objectID": "M1.html#exercises",
+    "href": "M1.html#exercises",
+    "title": "1 · R foundations",
+    "section": "Exercises",
+    "text": "Exercises\npenguins is already loaded. It has missing values, so remember na.rm = TRUE.\n\nQ1 — Summaries two ways\nCompute the mean, median and SD of bill_length_mm for each species, once in base R and once with dplyr. Confirm the numbers match.\n\n\n\n\n\n\n\n\n\nGroup by species. The formula interface of aggregate() drops rows with NA automatically; in summarise() you need na.rm = TRUE in each call.\n\n\naggregate(bill_length_mm ~ species, data = penguins,\n          FUN = function(x) c(mean = mean(x), median = median(x), sd = sd(x)))\n\npenguins |&gt;\n  group_by(species) |&gt;\n  summarise(\n    mean_bill   = mean(bill_length_mm,   na.rm = TRUE),\n    median_bill = median(bill_length_mm, na.rm = TRUE),\n    sd_bill     = sd(bill_length_mm,     na.rm = TRUE),\n    n           = sum(!is.na(bill_length_mm))\n  )\nAdelie ~39 mm, Chinstrap ~49 mm, Gentoo ~47 mm: bill length nearly separates Adelie from the other two but not Chinstrap from Gentoo.\n\n\n\nQ2 — Three plots of flipper vs body mass\nMake: (1) all points, one colour, with an overall linear smoother; (2) coloured by species with per-species smoothers; (3) as (2) but faceted by island. Write one sentence on what each plot adds.\n\n\n\n\n\n\n\n\n\np2 &lt;- ggplot(penguins, aes(flipper_length_mm, body_mass_g, colour = species)) +\n  geom_point(alpha = 0.7) +\n  geom_smooth(method = \"lm\", se = FALSE)\np3 &lt;- p2 + facet_wrap(~ island)\n\nOverall positive relationship: bigger flippers, bigger birds.\nWithin each species the slope is much shallower than the pooled slope. Species differ in both flipper length and mass, so pooling exaggerates the slope (an aggregation effect, though not a full Simpson’s reversal).\nSpecies aren’t evenly spread across islands (Gentoo only on Biscoe, Chinstrap only on Dream), so any “island effect” is confounded with species.\n\n\n\n\nQ3 — Write a describe() function\nReturn a one-row data frame with n (non-missing), mean, sd, median, IQR and n_missing, then apply it to every numeric column.\n\n\n\n\n\n\n\n\n\nsum(!is.na(x)) counts non-missing values; sum(is.na(x)) counts missing ones.\n\n\ndescribe &lt;- function(x) {\n  data.frame(\n    n = sum(!is.na(x)), mean = mean(x, na.rm = TRUE), sd = sd(x, na.rm = TRUE),\n    median = median(x, na.rm = TRUE), IQR = IQR(x, na.rm = TRUE),\n    n_missing = sum(is.na(x))\n  )\n}\n\n\n\nQ4 — Read a model with broom\nFit lm(body_mass_g ~ flipper_length_mm), then get the coefficient table and the model-level statistics. Interpret the slope in real units.\n\n\n\n\n\n\n\n\n\ntidy(m)\nglance(m)\nEach extra millimetre of flipper is associated with about 50 g more body mass (slope ≈ 49.7 g/mm), and flipper length alone explains about 76% of the variance (R² ≈ 0.76). This is a marginal association, not causal and not species-adjusted; Q2 showed it pools several shallower within-species slopes.\n\n\n\nQ5 — Western blot: spreadsheet to tidy, normalized data\ndata/western_blot_example.csv mirrors an Excel export after quantifying blots (one row = one lane × technical replicate). Inspect it, normalize to the loading control, average the three technical replicates within each biological replicate (you should get 16 rows), set WT as the reference, and make the dot plot you’d put in a paper.\n\n\n\n\n\n\n\n\n\nRatio = Target_Intensity / Loading_Control_Intensity; group by Genotype and Bio_Rep; levels c(\"WT\", \"HET\", \"KO\", \"RESCUE\").\n\n\nblot_bio &lt;- blot |&gt;\n  mutate(Ratio = Target_Intensity / Loading_Control_Intensity) |&gt;\n  group_by(Genotype, Bio_Rep) |&gt;\n  summarise(Ratio = mean(Ratio), .groups = \"drop\") |&gt;\n  mutate(Genotype = factor(Genotype, levels = c(\"WT\", \"HET\", \"KO\", \"RESCUE\")))\n\nThe biological replicate is the unit of replication: n = 4 per group, not 12. Treating technical replicates as independent inflates n and gives a bogus test. In Module 8 the clustering is modelled with a biological-replicate random intercept instead.\nRESCUE should sit back near WT and KO be clearly reduced. Eyeballing this before any test is a sanity check that the code did what you expected."
+  },
+  {
+    "objectID": "M1.html#mini-project",
+    "href": "M1.html#mini-project",
+    "title": "1 · R foundations",
+    "section": "Mini-project",
+    "text": "Mini-project\nBuild the content of module_01_report.qmd here: the Q1 summary table, the three Q2 plots with a sentence each, the Q4 tidy() output with its interpretation, and the Q5 dot plot. Then paste it into a Quarto document locally and render it."
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "R Statistics & GLMs",
+    "section": "",
+    "text": "Every code box on these pages runs real R, inside your browser. There’s nothing to install. Edit the code, press Run Code, and use Show Hint and Show Solution when you’re stuck. Your edits are saved in this browser, so you can come back later."
+  },
+  {
+    "objectID": "index.html#the-course",
+    "href": "index.html#the-course",
+    "title": "R Statistics & GLMs",
+    "section": "The course",
+    "text": "The course\nA 10-part progression (an R primer, eight substantive modules and a capstone), each about a week at 3–5 hours. The examples use built-in or package datasets plus one included CSV, so everything is reproducible.\n\nApplied wet-lab track. A running western blot case study is threaded through the course using data/western_blot_example.csv (WT / HET / KO / RESCUE, 4 biological reps × 3 technical reps each): tidying in Module 1, the ANOVA deep dive in Module 3, assumption checks in Module 5, and a mixed-model treatment of the technical replicates in Module 8."
+  },
+  {
+    "objectID": "index.html#modules",
+    "href": "index.html#modules",
+    "title": "R Statistics & GLMs",
+    "section": "Modules",
+    "text": "Modules\n\n\n\n\nModule\nTry it\n\n\n\n\n0\nR syntax primer\nSubsetting, factors, formulas and pipes warm-ups\n\n\n1\nR foundations\nPenguin plot builder; spreadsheet → tidy blot data\n\n\n2\nDistributions and simulation\nCLT explorer and a Student-vs-Welch Type I error simulator\n\n\n3\nClassical inference\nTechnical-replicate pseudoreplication simulator; blot ANOVA + post-hocs\n\n\n4\nLinear regression\nWatch the wt slope change as you adjust for other predictors\n\n\n5\nRegression diagnostics\nDrag one point around and watch leverage and Cook’s distance\n\n\n6\nThe GLM framework\nLink-function explorer: link scale vs response scale\n\n\n7\nLogistic regression\nThreshold and cost explorer with a live confusion matrix and ROC\n\n\n8\nCount GLMs and mixed models\nOverdispersion simulator: Poisson vs quasi-Poisson vs negative binomial\n\n\n9\nCapstone\nAnalysis templates and a separation simulation sandbox\n\n\n\nThe full written notes, mini-projects and reflections live in the Obsidian .md files in this repository; these pages cover the hands-on part."
+  },
+  {
+    "objectID": "index.html#how-to-work-through-this",
+    "href": "index.html#how-to-work-through-this",
+    "title": "R Statistics & GLMs",
+    "section": "How to work through this",
+    "text": "How to work through this\n\nRead the module note (or the summary at the top of each page).\nWork each exercise in the browser. Get to a stopping point on your own before opening the solution: a wrong answer you can articulate is more useful than a correct one you copied.\nDo the mini-project in the page’s sandbox, or locally in a .qmd file.\nWrite 3–5 sentences in the reflection section of the module note."
+  },
+  {
+    "objectID": "index.html#datasets-used",
+    "href": "index.html#datasets-used",
+    "title": "R Statistics & GLMs",
+    "section": "Datasets used",
+    "text": "Datasets used\n\nmtcars, iris, sleep, HairEyeColor, warpbreaks, ToothGrowth (base R)\npalmerpenguins::penguins\nMASS::quine\nISLR2::Default\nggplot2::diamonds\nlme4::cbpp\ndata/western_blot_example.csv (simulated densitometry)"
+  },
+  {
+    "objectID": "index.html#tips",
+    "href": "index.html#tips",
+    "title": "R Statistics & GLMs",
+    "section": "Tips",
+    "text": "Tips\n\nPages load R once; the first visit is slow, later ones are faster.\nStart Over on any box restores the original code.\nHeavy boxes (bootstraps, simulations) can take 10–60 seconds. The button shows a spinner while R works.\nWorks best in Chrome, Edge, Firefox or Safari on a laptop. It runs on phones too, just more slowly.\nTo work locally instead, install the packages once:\n\ninstall.packages(c(\n  \"tidyverse\", \"broom\", \"car\", \"MASS\",\n  \"palmerpenguins\", \"ISLR2\", \"readxl\",\n  \"performance\", \"emmeans\", \"DHARMa\", \"lme4\", \"lmerTest\",\n  \"pROC\", \"logistf\", \"multcomp\", \"sandwich\", \"lmtest\",\n  \"ggpubr\", \"betareg\", \"glmnet\"\n))"
+  },
+  {
+    "objectID": "M0.html",
+    "href": "M0.html",
+    "title": "0 · R syntax primer",
+    "section": "",
+    "text": "Course data (loads automatically; click to see the code)\n\n\n\n\n\nR runs inside your browser. The first visit downloads R and the packages, which takes 20–40 seconds; after that the browser caches them. Wait for this block to finish before running exercises.\nA quick reference for R’s syntax quirks before Module 1. Skim if you’re comfortable; come back whenever a later module uses something you don’t recognise. The goal is that when you see something like the line below, you can read what’s happening."
+  },
+  {
+    "objectID": "M0.html#try-it-the-syntax-in-one-box",
+    "href": "M0.html#try-it-the-syntax-in-one-box",
+    "title": "0 · R syntax primer",
+    "section": "Try it: the syntax in one box",
+    "text": "Try it: the syntax in one box\nRun this, then change things and run it again. Nothing here can break anything."
+  },
+  {
+    "objectID": "M0.html#cheat-sheet",
+    "href": "M0.html#cheat-sheet",
+    "title": "0 · R syntax primer",
+    "section": "Cheat sheet",
+    "text": "Cheat sheet\n\n\n\n\n\n\n\nTopic\nThe thing to remember\n\n\n\n\nAssignment\nx &lt;- 5. Keep = for named arguments inside function calls.\n\n\nTypes\nnumeric, integer (3L), character, logical (TRUE/FALSE, never T/F), factor, NA. Check with class() and str().\n\n\nVectors\nEverything is a vector; arithmetic is vectorised; shorter vectors are recycled.\n\n\nSubsetting\n$ and [[...]] pull a column out as a vector; a single [...] keeps you in data-frame world. x[-1] drops the first element.\n\n\nFactors\nLevel order sets the reference level. Set it yourself: factor(g, levels = c(\"WT\", \"HET\", \"KO\", \"RESCUE\")). Use droplevels() after filtering.\n\n\nFormulas\ny ~ x + z main effects; y ~ x * z adds x:z; y ~ . all other columns; - 1 removes the intercept.\n\n\nPipes\na |&gt; f() |&gt; g() reads left to right and means g(f(a)).\n\n\nFunctions\nf &lt;- function(x, na.rm = TRUE) { ... }; the last expression is returned. ... passes extra arguments along.\n\n\nNA\nViral: mean(c(1, NA)) is NA. Test with is.na(), never == NA.\n\n\nPackages\ninstall.packages() once, library() each session, or pkg::fun() without loading.\n\n\nHelp\n?mean, ?\"[\", ??anova.\n\n\n\n\nCommon gotchas\n\n\n\n\n\n\n\nGotcha\nFix\n\n\n\n\nNumeric columns import from CSV as character\nstr(df) to check types; type.convert()\n\n\nFactor levels in the wrong (alphabetical) order\nfactor(x, levels = c(...)) explicitly\n\n\nmean(x) returns NA\nAdd na.rm = TRUE\n\n\nSingle [...] returns a data frame, not a vector\nUse [[...]] or $\n\n\nComparing to NA with == returns NA\nUse is.na()\n\n\nRow names silently dropped after subsetting\nMove IDs into a real column"
+  },
+  {
+    "objectID": "M0.html#exercises",
+    "href": "M0.html#exercises",
+    "title": "0 · R syntax primer",
+    "section": "Exercises",
+    "text": "Exercises\nShort warm-ups. If any takes more than a minute, that’s the section of the cheat sheet to reread.\n\nQ1 — Vector subsetting\nUsing x, produce: (1) the element named \"c\"; (2) all elements greater than 25; (3) every element except \"a\"; (4) the elements at positions 2 and 4.\n\n\n\n\n\n\n\n\n\nNames go in quotes. A negative index drops that position. Several positions go inside c().\n\n\nx[\"c\"]           # named\nx[x &gt; 25]        # logical\nx[-1]            # negative indexing\nx[c(2, 4)]       # positional\n\n\n\nQ2 — Data frame access, four ways\nExtract the value column as a vector using four different syntaxes. Then run class() on df[\"value\"] to see why it isn’t one of them.\n\n\n\n\n\n\n\n\n\ndf$value\ndf[[\"value\"]]\ndf[, \"value\"]\ndf[, 2]\ndf[\"value\"] and df[, \"value\", drop = FALSE] return a one-column data frame, not a vector. This distinction bites people constantly.\n\n\n\nQ3 — Factors and reference levels\nTurn g into a factor with WT as the reference level and the order WT → HET → KO → RESCUE, then confirm with levels(). Compare with what factor(g) does on its own.\n\n\n\n\n\n\n\n\n\nlevels = c(\"WT\", \"HET\", \"KO\", \"RESCUE\")\n\n\ngf &lt;- factor(g, levels = c(\"WT\", \"HET\", \"KO\", \"RESCUE\"))\nlevels(gf)\nThe default puts HET first, so every regression coefficient would be relative to HET instead of WT.\n\n\n\nQ4 — Chain with the pipe\nUsing mtcars and the native pipe, write one pipeline that keeps cars with cyl == 6, selects mpg, hp and wt, sorts by descending mpg, and returns the top 3 rows.\n\n\n\n\n\n\n\n\n\nfilter(cyl == 6), select(mpg, hp, wt), arrange(desc(mpg)).\n\n\nmtcars |&gt;\n  filter(cyl == 6) |&gt;\n  select(mpg, hp, wt) |&gt;\n  arrange(desc(mpg)) |&gt;\n  head(3)\n\n\n\nQ5 — Write a function\nWrite mean_ci(x, level = 0.95) returning a named vector with the mean and the lower and upper bounds of a Normal-approximation confidence interval. Handle NAs.\n\n\n\n\n\n\n\n\n\nKeep non-missing values with !is.na(x). The SE divides by sqrt(length(x)). The bounds are m - z * se and m + z * se.\n\n\nmean_ci &lt;- function(x, level = 0.95) {\n  x  &lt;- x[!is.na(x)]\n  m  &lt;- mean(x)\n  se &lt;- sd(x) / sqrt(length(x))\n  z  &lt;- qnorm(1 - (1 - level) / 2)\n  c(mean = m, lower = m - z * se, upper = m + z * se)\n}\n\n\n\nQ6 — Read a formula\nWithout running anything, say what each formula means: (1) y ~ x + z, (2) y ~ x * z, (3) y ~ . - id, (4) log(y) ~ x - 1. Then check yourself: model.matrix() shows the columns R actually builds.\n\n\n\n\n\n\n\n\n\n\ny explained by main effects of x and z (no interaction).\ny explained by main effects and the x:z interaction.\ny explained by all other columns in data except id.\nlog(y) explained by x with no intercept (the fitted log(y) is forced through 0 when x = 0)."
+  },
+  {
+    "objectID": "M0.html#sandbox",
+    "href": "M0.html#sandbox",
+    "title": "0 · R syntax primer",
+    "section": "Sandbox",
+    "text": "Sandbox\nNo mini-project for Module 0. Skim it, do the warm-ups, then move on to Module 1."
+  },
+  {
+    "objectID": "M2.html",
+    "href": "M2.html",
+    "title": "2 · Distributions and simulation",
+    "section": "",
+    "text": "Course data (loads automatically; click to see the code)\n\n\n\n\n\nR runs inside your browser. The first visit downloads R and the packages, which takes 20–40 seconds; after that the browser caches them. Wait for this block to finish before running exercises.\nEvery test statistic, p-value, standard error and confidence interval in this course rests on one idea: the sampling distribution. Simulating it beats memorising it.\nThe same four prefixes work for binom, pois, exp, t, chisq, f, beta, gamma, unif, …"
+  },
+  {
+    "objectID": "M2.html#explore-the-central-limit-theorem",
+    "href": "M2.html#explore-the-central-limit-theorem",
+    "title": "2 · Distributions and simulation",
+    "section": "Explore: the Central Limit Theorem",
+    "text": "Explore: the Central Limit Theorem\nDraw 5000 samples of size n from a population and look at the distribution of the 5000 sample means. The red curve is the Normal the CLT promises.\n\nviewof clt_dist = Inputs.select([\"Exponential (skewed)\", \"Log-normal (very skewed)\", \"Uniform\", \"Normal\", \"Poisson(1) (discrete)\"], {value: \"Exponential (skewed)\", label: \"Population\"})\nviewof clt_n = Inputs.range([1, 200], {value: 5, step: 1, label: \"Sample size n\"})\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nUniform data look Normal by n ≈ 5. The exponential needs n ≈ 30–100, and the log-normal still shows right skew at n = 100. “n &gt; 30 is enough” is a rule of thumb for mild skew, not a law, which is a good argument for always plotting your data first."
+  },
+  {
+    "objectID": "M2.html#explore-does-the-t-test-keep-its-promise",
+    "href": "M2.html#explore-does-the-t-test-keep-its-promise",
+    "title": "2 · Distributions and simulation",
+    "section": "Explore: does the t-test keep its promise?",
+    "text": "Explore: does the t-test keep its promise?\nBoth groups come from populations with the same mean, so every rejection is a false positive and a valid 5% test should reject 5% of the time. Make the variances and the group sizes unequal and compare Student’s t-test with Welch’s.\n\nviewof t_n1 = Inputs.range([3, 60], {value: 10, step: 1, label: \"n in group 1\"})\nviewof t_n2 = Inputs.range([3, 60], {value: 40, step: 1, label: \"n in group 2\"})\nviewof t_sd1 = Inputs.range([0.25, 6], {value: 4, step: 0.25, label: \"SD of group 1 (group 2 SD = 1)\"})\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nWith equal n, Student’s test is fairly robust. When the smaller group has the larger variance, Student’s false-positive rate shoots well above 5%; flip it and the test becomes very conservative. Welch’s stays near 5% throughout, which is why R uses it by default."
+  },
+  {
+    "objectID": "M2.html#exercises",
+    "href": "M2.html#exercises",
+    "title": "2 · Distributions and simulation",
+    "section": "Exercises",
+    "text": "Exercises\n\nQ1 — CLT by simulation\nSimulate 10,000 means of samples of size 5, 30 and 100 from rexp(rate = 1) and overlay the Normal(1, 1/√n). At what n would you be comfortable using a t-test on data this skewed?\n\n\n\n\n\n\n\n\n\nEach sample has size n; the theoretical SD of the mean is 1 / sqrt(n).\n\n\ndata.frame(n = n, mean = replicate(reps, mean(rexp(n, rate = 1))))\ndnorm(x, mean = 1, sd = 1 / sqrt(n))\nAt n = 5 the sampling distribution is still clearly right-skewed; at n = 30 it’s fairly symmetric but the left tail is short; at n = 100 it’s hard to tell from the Normal. “n &gt; 30” is fine for mild skew but marginal for exponential-like data.\n\n\n\nQ2 — Standard error, three ways\nEstimate the SE of the mean of x by formula, by simulating from the known population, and by bootstrapping x. Why does the bootstrap work when you don’t know the population?\n\n\n\n\n\n\n\n\n\nse_formula &lt;- sd(x) / sqrt(length(x))\nse_boot    &lt;- sd(replicate(10000, mean(sample(x, replace = TRUE))))\nAll three are ≈ 0.42 (= 3/√50). The sample is our best estimate of the population, so resampling it with replacement mimics drawing new samples from the population.\n\n\n\nQ3 — Bootstrap CI for a median\nCompute a 95% percentile bootstrap CI for the median body_mass_g of Gentoo penguins (5000 resamples) and compare it with a naive median ± 1.96 × bootstrap SE.\n\n\n\n\n\n\n\n\n\nboot_medians &lt;- replicate(5000, median(sample(gentoo, replace = TRUE)))\nci_pct &lt;- quantile(boot_medians, c(0.025, 0.975))\nThe histogram shows why the percentile interval is preferable to the naive Normal one: the bootstrap distribution of a median is lumpy and can be asymmetric, and the Normal interval assumes symmetry. The percentile method is not universally best; BCa or bootstrap-t intervals often cover better in small or skewed samples.\n\n\n\nQ4 — Type I error, empirically\nSimulate 10,000 null two-sample t-tests. (1) What fraction has p &lt; 0.05? (2) What shape is the p-value histogram? (3) With SDs 1 vs 4 and n1 = 10, n2 = 40, what happens to Student’s test? (4) Does Welch’s fix it?\n\n\n\n\n\n\n\n\n\np_student &lt;- replicate(10000, one_pvalue(n1 = 10, n2 = 40, sd1 = 4, sd2 = 1, var.equal = TRUE))\np_welch   &lt;- replicate(10000, one_pvalue(n1 = 10, n2 = 40, sd1 = 4, sd2 = 1, var.equal = FALSE))\n\nNull, equal variances: ≈ 5% rejections and a flat p-value histogram. For an exact continuous test under a simple null, p-values are Uniform(0, 1).\nStudent’s with the small group having the large SD: about 30%, six times the nominal rate. Swap which group is bigger and it drops far below 5%.\nWelch’s: ≈ 5% in every scenario.\n\nThis is how to check any test or model: simulate under the null and look at calibration.\n\n\n\nQ5 — Power by simulation\nSimulate the power of a two-sample t-test with n = 20 per group and Cohen’s d = 0.5, and check it against power.t.test().\n\n\n\n\n\n\n\n\n\nt.test(rnorm(20, 0, 1), rnorm(20, 0.5, 1))$p.value &lt; 0.05\nBoth give ≈ 0.34: a study this size catches a medium effect only about a third of the time. A prospective power analysis is just this simulation done before collecting data, and it works for any design."
+  },
+  {
+    "objectID": "M2.html#mini-project",
+    "href": "M2.html#mini-project",
+    "title": "2 · Distributions and simulation",
+    "section": "Mini-project",
+    "text": "Mini-project\nCollect the three CLT panels with your “at what n” answer, the three SE estimates, the bootstrap vs Normal CI, and a table of Type I error rates across four scenarios (equal/unequal variance × Student/Welch), then write up module_02_report.qmd locally."
+  },
+  {
+    "objectID": "M4.html",
+    "href": "M4.html",
+    "title": "4 · Linear regression",
+    "section": "",
+    "text": "Course data (loads automatically; click to see the code)\n\n\n\n\n\nR runs inside your browser. The first visit downloads R and the packages, which takes 20–40 seconds; after that the browser caches them. Wait for this block to finish before running exercises.\nThe linear model is the atom of everything that follows: ANOVA was a linear model with a categorical predictor, every GLM is a linear model with a link function, and mixed models are linear models with extra variance components.\n\\[y_i = \\beta_0 + \\beta_1 x_{1i} + \\beta_2 x_{2i} + \\dots + \\varepsilon_i, \\qquad \\varepsilon_i \\sim \\mathrm{Normal}(0, \\sigma^2)\\]"
+  },
+  {
+    "objectID": "M4.html#explore-adjusting-changes-the-slope",
+    "href": "M4.html#explore-adjusting-changes-the-slope",
+    "title": "4 · Linear regression",
+    "section": "Explore: adjusting changes the slope",
+    "text": "Explore: adjusting changes the slope\nThe question is “how does mpg change with weight?”. Tick covariates to adjust for. The plot is an added-variable plot: mpg and weight each with the covariates regressed out, so its slope is exactly the adjusted wt coefficient.\n\nviewof m4_covs = Inputs.checkbox([\"hp\", \"cyl\", \"disp\", \"qsec\", \"am\", \"drat\"], {label: \"Adjust for\", value: []})\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nAdding hp moves the slope from −5.3 to −3.9, because heavy cars also tend to be powerful. Adding disp or cyl widens the interval, because they overlap heavily with weight (collinearity, Module 5). Which slope is “right” depends on the question, not on which one has the smallest p-value."
+  },
+  {
+    "objectID": "M4.html#exercises",
+    "href": "M4.html#exercises",
+    "title": "4 · Linear regression",
+    "section": "Exercises",
+    "text": "Exercises\n\nQ1 — Simple regression in real units\nFit mpg ~ wt and mpg ~ hp. Report each slope with its 95% CI, compare residual standard errors, and decide whether the intercepts mean anything.\n\n\n\n\n\n\n\n\n\nfit_hp &lt;- lm(mpg ~ hp, data = mtcars)\nconfint(fit_wt)\nwt: ≈ −5.34 mpg per 1000 lb (residual SE ≈ 3.05). hp: ≈ −0.068 mpg per horsepower (residual SE ≈ 3.86), so weight explains more. The mpg ~ wt intercept (~37 mpg) extrapolates to a weightless car: intercepts are meaningful only when x = 0 lies within the data.\n\n\n\nQ2 — Adding a predictor changes the story\nCompare the wt coefficient with and without hp. Why does it move, and which one would you report?\n\n\n\n\n\n\n\n\n\nThe slope shrinks from about −5.34 to −3.88. Heavier cars also have more horsepower, so without hp the wt slope absorbs part of the horsepower association. Which to report depends on the estimand: the simple slope is the marginal association; the adjusted one compares cars with the same horsepower. Neither is automatically causal.\n\n\n\nQ3 — A categorical predictor as a linear model\nFit body_mass_g ~ species, interpret the coefficients as mean differences and check against the group means. Then add flipper_length_mm and see what happens to the species coefficients.\n\n\n\n\n\n\n\n\n\nfit_flsp &lt;- lm(body_mass_g ~ flipper_length_mm + species, data = penguins)\nIntercept = mean(Adelie) ≈ 3700 g; Chinstrap ≈ +32 g; Gentoo ≈ +1375 g, matching the group means. At a common flipper length, Chinstrap is about 207 g lighter and Gentoo about 267 g heavier than Adelie. That is a conditional association, not proof that flipper length “explains” the species differences.\n\n\n\nQ4 — Continuous × categorical interaction\nFit separate slopes per species, compute the Gentoo slope by hand, and test the interaction.\n\n\n\n\n\n\n\n\n\nThe interaction is *. The Gentoo slope is the reference (Adelie) slope plus the flipper_length_mm:speciesGentoo term.\n\n\nfit_int &lt;- lm(body_mass_g ~ flipper_length_mm * species, data = penguins)\ngentoo_slope &lt;- b[\"flipper_length_mm\"] + b[\"flipper_length_mm:speciesGentoo\"]\nflipper_length_mm:speciesGentoo is the difference in slope between Gentoo and Adelie. Adelie ≈ 32.8 g/mm, Gentoo ≈ 54.6 g/mm. The interaction terms jointly improve fit (F ≈ 5.53, p ≈ 0.0043).\n\n\n\nQ5 — Predictions with intervals\nPredict body mass for a Chinstrap with 200 mm flippers and a Gentoo with 220 mm flippers, with confidence and prediction intervals.\n\n\n\n\n\n\n\n\n\npredict(fit_int, newdata = new_data, interval = \"confidence\")\npredict(fit_int, newdata = new_data, interval = \"prediction\")\nThe confidence interval is our uncertainty about the average mass of penguins like this; the prediction interval is our uncertainty about one penguin, so it adds the residual variance and is much wider.\n\n\n\nQ6 — Model comparison\nCompare four mtcars models with nested F-tests and AIC. Which would you report?\n\n\n\n\n\n\n\n\n\nAIC(f1, f2, f3, f4)\nf2 improves on f1 (p ≈ 0.0015); adding cyl is weak (p ≈ 0.098); the wt:hp interaction helps (p ≈ 0.0032), and f4 has the lowest AIC by about 8.5. Among these prespecified candidates the evidence favours f4, but with 32 cars treat in-sample selection as exploratory."
+  },
+  {
+    "objectID": "M4.html#mini-project",
+    "href": "M4.html#mini-project",
+    "title": "4 · Linear regression",
+    "section": "Mini-project",
+    "text": "Mini-project\nBuild the “best” model of body_mass_g from flipper_length_mm, bill_length_mm, species, sex and justified interactions. Start from one complete-case dataset so every model uses the same rows. Include the building sequence with anova(), a tidy(fit, conf.int = TRUE) table with a sentence per coefficient, an observed-vs-fitted plot, and predictions for three hypothetical penguins."
+  },
+  {
+    "objectID": "M6.html",
+    "href": "M6.html",
+    "title": "6 · The GLM framework",
+    "section": "",
+    "text": "Course data (loads automatically; click to see the code)\n\n\n\n\n\nR runs inside your browser. The first visit downloads R and the packages, which takes 20–40 seconds; after that the browser caches them. Wait for this block to finish before running exercises.\nMany biological outcomes are binary, counts or proportions. A GLM keeps the linear predictor and adds two pieces:"
+  },
+  {
+    "objectID": "M6.html#explore-link-scale-vs-response-scale",
+    "href": "M6.html#explore-link-scale-vs-response-scale",
+    "title": "6 · The GLM framework",
+    "section": "Explore: link scale vs response scale",
+    "text": "Explore: link scale vs response scale\nThe top panel is the linear predictor (a straight line on the link scale). The bottom panel is the same model on the response scale, with 200 simulated observations from that family.\n\nviewof g_fam = Inputs.select([\"Poisson (log link)\", \"Binomial (logit link)\", \"Gaussian (identity link)\"], {value: \"Poisson (log link)\", label: \"Family\"})\nviewof g_b0 = Inputs.range([-3, 3], {value: 0.5, step: 0.1, label: \"Intercept β₀\"})\nviewof g_b1 = Inputs.range([-1.5, 1.5], {value: 0.3, step: 0.05, label: \"Slope β₁\"})\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nIn the Poisson case, a constant slope on the link scale becomes a curve that grows faster and faster on the response scale, and the scatter grows with the mean (variance = μ). In the binomial case the curve flattens near 0 and 1: the same odds ratio moves the probability a lot in the middle and hardly at all near the edges."
+  },
+  {
+    "objectID": "M6.html#exercises",
+    "href": "M6.html#exercises",
+    "title": "6 · The GLM framework",
+    "section": "Exercises",
+    "text": "Exercises\nquine (school absence days, from MASS) is already loaded.\n\nQ1 — A Gaussian GLM is lm()\nFit mpg ~ wt with lm() and with glm(family = gaussian()). Confirm the coefficients, SEs and predictions match, and explain why they must.\n\n\n\n\n\n\n\n\n\nglm_fit &lt;- glm(mpg ~ wt, family = gaussian(), data = mtcars)\nWith the identity link the linear predictor is the mean, and with Gaussian errors maximising the likelihood is the same as minimising the sum of squares, so least squares and maximum likelihood coincide.\n\n\n\nQ2 — Link scale vs response scale\nFit a Poisson GLM for Days ~ Sex + Age, convert the SexM coefficient to the response scale, and predict days absent for an F0 male and an F0 female, both by hand and with predict().\n\n\n\n\n\n\n\n\n\nc(male = exp(b[\"(Intercept)\"] + b[\"SexM\"]), female = exp(b[\"(Intercept)\"]))\npredict(fit, newdata = newd, type = \"response\")\nSexM ≈ 0.105 and exp(0.105) ≈ 1.11: the fitted mean for boys is about 11% higher, holding age group constant. This Poisson fit is badly overdispersed, so its SEs and p-values can’t be trusted; Module 8 refits it with a negative binomial.\n\n\n\nQ3 — Nested comparison with a likelihood-ratio test\nDoes adding Sex to Days ~ Age improve the Poisson fit? Compare the LRT with AIC.\n\n\n\n\n\n\n\n\n\nanova(fit_a, fit_ab, test = \"LRT\")\nDeviance drops by about 6.27 on 1 df (p ≈ 0.012) and AIC falls by about 4.27. Because quine is severely overdispersed, this Poisson LRT is anti-conservative: treat it as mechanics, and use Module 8’s negative binomial for inference.\n\n\n\nQ4 — Which family?\nName the family, link and glm() call for: (1) responded yes/no; (2) seizures per patient per week; (3) an uncensored, positive, right-skewed waiting time; (4) successes out of 20 attempts; (5) proportion of a plate covered (strictly between 0 and 1). Try each on the simulated data below.\n\n\n\n\n\n\n\n\n\n\nglm(responded ~ x, family = binomial(), data = df)\nglm(seizures ~ x, family = poisson(), data = df); then check overdispersion, which is common in clinical counts.\nglm(time ~ x, family = Gamma(link = \"log\"), data = df); if times can be censored, use survival analysis instead.\nglm(cbind(success, failure) ~ x, family = binomial(), data = df)\nBeta regression, betareg::betareg(pct ~ x). It excludes exact 0s and 1s, which need a zero/one-inflated model instead.\n\n\n\n\nQ5 — Simulate a Poisson GLM and recover it\nSimulate n = 500 with β₀ = 1, β₁ = 0.3 and x ~ Uniform(0, 5), fit the model, then repeat 1000 times to check the estimates are unbiased.\n\n\n\n\n\n\n\n\n\ny &lt;- rpois(n, lambda = exp(b0 + b1 * x))\nThe averages land on (1, 0.3). Simulate under a truth you chose, refit, and see whether you get it back: the same pattern checks power, robustness and calibration.\n\n\n\nQ6 — Deviance explained and McFadden’s pseudo-R²\nFor fit_ab, compute D² = 1 − residual/null deviance and McFadden’s pseudo-R² = 1 − logLik(model)/logLik(null).\n\n\n\n\n\n\n\n\n\nd2 &lt;- 1 - fit_ab$deviance / fit_ab$null.deviance\nmcfadden &lt;- 1 - as.numeric(logLik(fit_ab) / logLik(fit_null))\nAbout 0.080 (D²) vs 0.062 (McFadden): different definitions, different numbers, and neither is the fraction of outcome variance explained. Always name which one you report."
+  },
+  {
+    "objectID": "M6.html#mini-project",
+    "href": "M6.html#mini-project",
+    "title": "6 · The GLM framework",
+    "section": "Mini-project",
+    "text": "Mini-project\nBuild a Poisson GLM for quine with Age, Sex, Eth and Lrn plus any interactions you can justify. Show the LRT sequence, coefficients on both scales, predictions for two hypothetical students, deviance and pseudo-R², and a paragraph diagnosing overdispersion (residual deviance/df as a rough screen, Pearson dispersion as the main check)."
+  },
+  {
+    "objectID": "M8.html",
+    "href": "M8.html",
+    "title": "8 · Count GLMs and mixed models",
+    "section": "",
+    "text": "Course data (loads automatically; click to see the code)\n\n\n\n\n\nR runs inside your browser. The first visit downloads R and the packages, which takes 20–40 seconds; after that the browser caches them. Wait for this block to finish before running exercises.\nPoisson regression assumes E[y] = var(y) = λ with a log link; exp(β) is an expected-count ratio (a rate ratio when exposure is constant or handled with an offset).\nOverdispersion, variance larger than the mean, is the Poisson’s usual failure mode (unmeasured heterogeneity, clustering, contagion, excess zeros). Ignored, it makes SEs, p-values and CIs far too optimistic. Screen with residual deviance/df, check with the Pearson dispersion or performance::check_overdispersion(), then fix with:\nOffsets model rates: glm(y ~ x + offset(log(exposure)), family = poisson()) forces a coefficient of 1 on log(exposure), so the other coefficients compare rates.\nMixed models handle clustering (repeated measures, technical within biological replicates, herds, schools). (1 | subject) gives each subject its own random intercept drawn from a Normal distribution: lmer() for Gaussian outcomes, glmer() for binomial/Poisson. lme4 omits p-values for lmer() on purpose; lmerTest adds Satterthwaite or Kenward–Roger df."
+  },
+  {
+    "objectID": "M8.html#explore-what-overdispersion-does-to-a-poisson-test",
+    "href": "M8.html#explore-what-overdispersion-does-to-a-poisson-test",
+    "title": "8 · Count GLMs and mixed models",
+    "section": "Explore: what overdispersion does to a Poisson test",
+    "text": "Explore: what overdispersion does to a Poisson test\nTwo groups with the same mean count (5), generated from a negative binomial with dispersion θ. Small θ means lots of extra-Poisson variation (θ → ∞ is Poisson). Each test should reject 5% of the time.\n\nviewof od_theta = Inputs.range([0.5, 50], {value: 2, step: 0.5, label: \"NB dispersion θ (smaller = more overdispersed)\"})\nviewof od_n = Inputs.range([10, 100], {value: 30, step: 5, label: \"Observations per group\"})\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nAt θ = 2 the variance is 3.5× the mean and the Poisson test rejects a true null about a quarter of the time. Quasi-Poisson and the negative binomial stay near 5%. Push θ toward 50 and all three agree, because the data are then nearly Poisson."
+  },
+  {
+    "objectID": "M8.html#exercises",
+    "href": "M8.html#exercises",
+    "title": "8 · Count GLMs and mixed models",
+    "section": "Exercises",
+    "text": "Exercises\nquine is loaded, and blot holds all 48 technical-replicate rows of the western blot data.\n\nQ1 — Poisson and overdispersion\nFit the full Poisson model for quine and diagnose overdispersion.\n\n\n\n\n\n\n\n\n\nsum(residuals(fit, type = \"pearson\")^2) / df.residual(fit)\nResidual deviance/df ≈ 12.2 and the formal check confirms severe overdispersion. Poisson SEs are badly underestimated, so the Sex p-value would be far too small. (Don’t read 12.2 literally as “12 times the variance”.)\n\n\n\nQ2 — The negative binomial fix\nRefit with MASS::glm.nb(), compare the SEs and AIC, and report the SexM rate ratio with a 95% CI.\n\n\n\n\n\n\n\n\n\nfit_nb &lt;- MASS::glm.nb(Days ~ Age + Sex + Eth + Lrn, data = quine)\nNB SEs are several times larger and AIC drops by hundreds. The SexM rate ratio is close to 1 with a wide CI that includes 1: once overdispersion is handled there is no strong evidence for a Sex effect, although the naive Poisson fit declared one.\n\n\n\nQ3 — Offsets for rates\nCities vary 100-fold in population and the true policy effect on the crime rate is β = −0.3. Fit with and without an offset.\n\n\n\n\n\n\n\n\n\nwith_offset &lt;- glm(crimes ~ policy + offset(log(population)), family = poisson(), data = cities)\nWithout the offset the policy coefficient mostly reflects chance imbalance in city size; with it, the model compares crime rates and recovers about −0.3.\n\n\n\nQ4 — Warp breaks with emmeans\nFit breaks ~ wool * tension and get response-scale marginal means and pairwise contrasts. Which tension gives the fewest breaks for each wool?\n\n\n\n\n\n\n\n\n\nemm &lt;- emmeans(fit, ~ tension | wool, type = \"response\")\nWool A: medium tension is lowest (≈ 24.0 breaks), very close to high (≈ 24.6). Wool B: high tension is lowest (≈ 18.8). Check the pairwise intervals before claiming close means differ, and check this Poisson fit for overdispersion too.\n\n\n\nQ5 — Binomial GLMM on cbpp\nCattle herds are clusters. Fit a random-intercept binomial GLMM, read the herd variance, and compare the period SEs with an ordinary GLM.\n\n\n\n\n\n\n\n\n\nfit_glmer &lt;- glmer(cbind(incidence, size - incidence) ~ period + (1 | herd),\n                   family = binomial(), data = cbpp)\nThe herd SD is about 0.64 on the log-odds scale. Period SEs are only modestly larger than the GLM’s (period 2: ≈ 0.303 vs 0.291). The main issue is that the ordinary GLM assumes independence and can’t represent between-herd heterogeneity, not that every GLMM SE must be bigger.\n\n\n\nQ6 — Western blot with a biological-replicate random intercept\nModel all 48 rows with a random intercept per biological replicate. Estimate the share of variance between biological replicates, compare SEs with the averaged lm, and run Dunnett-style contrasts.\n\n\n\n\n\n\n\n\n\nThe grouping factor is Bio_ID. Bio_Rep numbers restart at 1 in every genotype, so Bio_Rep on its own would wrongly lump “WT rep 1” with “KO rep 1”.\n\n\nfit_mixed &lt;- lmer(log(Ratio) ~ Genotype + (1 | Bio_ID), data = blot)\nBio-rep variance ≈ 0.00272 and residual ≈ 0.000327 on the log scale, an ICC of ≈ 0.89. The mixed-model and averaged SEs are virtually identical (KO: ≈ 0.03761 vs 0.03762), as expected in this balanced design. The mixed model keeps the measurement-level rows without pretending they’re independent, shows both variance components, and extends to imbalance or measurement-level covariates. Neither approach rescues too few biological replicates or unmodelled blot/batch effects."
+  },
+  {
+    "objectID": "M8.html#mini-project",
+    "href": "M8.html#mini-project",
+    "title": "8 · Count GLMs and mixed models",
+    "section": "Mini-project",
+    "text": "Mini-project\nFor quine: Poisson and NB versions of the full model, the overdispersion diagnostic, NB rate ratios with CIs, predictions with 95% intervals for two students, and a paragraph on how you’d extend it to a mixed model if the data came from several schools."
+  }
+]

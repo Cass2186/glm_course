@@ -1,0 +1,12 @@
+/*-- scss:defaults --*/
+$primary: #3b5a8f;
+$link-color: #3b5a8f;
+$font-family-sans-serif: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+$headings-font-family: "Fraunces", Georgia, serif;
+$headings-font-weight: 600;
+
+/*-- scss:rules --*/
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Source+Sans+3:wght@400;600&display=swap');
+h1.title { letter-spacing: -0.01em; }
+.estimand { border-left: 4px solid $primary; padding: .6rem 1rem; background: rgba(59,90,143,.08); border-radius: 0 6px 6px 0; }
+.small-note { font-size: .9em; opacity: .8; }

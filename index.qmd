@@ -1,0 +1,68 @@
+---
+title: "R Statistics & GLMs"
+subtitle: "An interactive companion to the Obsidian course notes"
+---
+
+{{< include _extensions/live/_knitr.qmd >}}
+
+Every code box on these pages runs real R, inside your browser. There's nothing to install. Edit the code, press **Run Code**, and use **Show Hint** and **Show Solution** when you're stuck. Your edits are saved in this browser, so you can come back later.
+
+## The course
+
+A 10-part progression (an R primer, eight substantive modules and a capstone), each about a week at 3–5 hours. The examples use built-in or package datasets plus one included CSV, so everything is reproducible.
+
+::: {.estimand}
+**Applied wet-lab track.** A running western blot case study is threaded through the course using `data/western_blot_example.csv` (WT / HET / KO / RESCUE, 4 biological reps × 3 technical reps each): tidying in Module 1, the ANOVA deep dive in Module 3, assumption checks in Module 5, and a mixed-model treatment of the technical replicates in Module 8.
+:::
+
+## Modules
+
+| | Module | Try it |
+|---|---|---|
+| 0 | [R syntax primer](M0.qmd) | Subsetting, factors, formulas and pipes warm-ups |
+| 1 | [R foundations](M1.qmd) | Penguin plot builder; spreadsheet → tidy blot data |
+| 2 | [Distributions and simulation](M2.qmd) | CLT explorer and a Student-vs-Welch Type I error simulator |
+| 3 | [Classical inference](M3.qmd) | Technical-replicate pseudoreplication simulator; blot ANOVA + post-hocs |
+| 4 | [Linear regression](M4.qmd) | Watch the `wt` slope change as you adjust for other predictors |
+| 5 | [Regression diagnostics](M5.qmd) | Drag one point around and watch leverage and Cook's distance |
+| 6 | [The GLM framework](M6.qmd) | Link-function explorer: link scale vs response scale |
+| 7 | [Logistic regression](M7.qmd) | Threshold and cost explorer with a live confusion matrix and ROC |
+| 8 | [Count GLMs and mixed models](M8.qmd) | Overdispersion simulator: Poisson vs quasi-Poisson vs negative binomial |
+| 9 | [Capstone](M9.qmd) | Analysis templates and a separation simulation sandbox |
+
+The full written notes, mini-projects and reflections live in the Obsidian `.md` files in this repository; these pages cover the hands-on part.
+
+## How to work through this
+
+1. Read the module note (or the summary at the top of each page).
+2. Work each exercise in the browser. Get to a stopping point on your own before opening the solution: a wrong answer you can articulate is more useful than a correct one you copied.
+3. Do the mini-project in the page's sandbox, or locally in a `.qmd` file.
+4. Write 3–5 sentences in the reflection section of the module note.
+
+## Datasets used
+
+- `mtcars`, `iris`, `sleep`, `HairEyeColor`, `warpbreaks`, `ToothGrowth` (base R)
+- `palmerpenguins::penguins`
+- `MASS::quine`
+- `ISLR2::Default`
+- `ggplot2::diamonds`
+- `lme4::cbpp`
+- `data/western_blot_example.csv` (simulated densitometry)
+
+## Tips
+
+- Pages load R once; the first visit is slow, later ones are faster.
+- **Start Over** on any box restores the original code.
+- Heavy boxes (bootstraps, simulations) can take 10–60 seconds. The button shows a spinner while R works.
+- Works best in Chrome, Edge, Firefox or Safari on a laptop. It runs on phones too, just more slowly.
+- To work locally instead, install the packages once:
+
+```r
+install.packages(c(
+  "tidyverse", "broom", "car", "MASS",
+  "palmerpenguins", "ISLR2", "readxl",
+  "performance", "emmeans", "DHARMa", "lme4", "lmerTest",
+  "pROC", "logistf", "multcomp", "sandwich", "lmtest",
+  "ggpubr", "betareg", "glmnet"
+))
+```
