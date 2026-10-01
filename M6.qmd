@@ -1,0 +1,241 @@
+---
+title: "6 · The GLM framework"
+subtitle: "Linear predictor, link, variance function; link vs response scale; deviance and LRTs"
+webr:
+  resources:
+    - data
+  cell-options:
+    fig-width: 7
+    fig-height: 4.2
+    timelimit: 180
+    persist: true
+  packages:
+    - MASS
+    - dplyr
+    - ggplot2
+    - broom
+---
+
+{{< include _extensions/live/_knitr.qmd >}}
+{{< include _setup.qmd >}}
+
+Many biological outcomes are binary, counts or proportions. A GLM keeps the linear predictor and adds two pieces:
+
+1. **Linear predictor** η = β₀ + β₁x₁ + … (as before).
+2. **Link function** g(·) with g(E[y]) = η.
+3. **Variance function**: how var(y) depends on E[y], set by the family.
+
+| Outcome | Family | Default link | Variance |
+|---|---|---|---|
+| Continuous, Normal errors | `gaussian` | identity | σ² |
+| Binary or grouped proportion | `binomial` | logit | μ(1 − μ) (÷ n trials for a proportion) |
+| Count | `poisson` | log | μ |
+| Overdispersed count | `quasipoisson` / `MASS::glm.nb` | log | φμ / μ + μ²/θ |
+| Positive, right-skewed continuous | `Gamma` | inverse (often log) | μ²/ν |
+
+- **Link scale**: coefficients are additive. **Response scale** (log link): `exp(β)` is a *ratio* of means, so a Poisson β of 0.4 means ×1.49, a 49% increase, not 40%.
+- **Deviance** replaces the residual sum of squares. Null deviance − residual deviance measures improvement over the intercept-only model; it is not an R².
+- **Nested GLMs**: `anova(fit0, fit1, test = "LRT")`. The z-tests in `summary()` are Wald tests, which can misbehave in small samples or with separation; prefer LRTs when in doubt.
+
+## Explore: link scale vs response scale
+
+The top panel is the linear predictor (a straight line on the link scale). The bottom panel is the same model on the response scale, with 200 simulated observations from that family.
+
+```{ojs}
+//| echo: false
+viewof g_fam = Inputs.select(["Poisson (log link)", "Binomial (logit link)", "Gaussian (identity link)"], {value: "Poisson (log link)", label: "Family"})
+viewof g_b0 = Inputs.range([-3, 3], {value: 0.5, step: 0.1, label: "Intercept β₀"})
+viewof g_b1 = Inputs.range([-1.5, 1.5], {value: 0.3, step: 0.05, label: "Slope β₁"})
+```
+
+```{webr}
+#| input:
+#|   - g_fam
+#|   - g_b0
+#|   - g_b1
+#| caption: Link-function explorer
+#| autorun: true
+#| fig-height: 6
+set.seed(10)
+x   <- seq(0, 6, length.out = 200)
+eta <- g_b0 + g_b1 * x
+mu  <- switch(g_fam, "Poisson (log link)" = exp(eta),
+              "Binomial (logit link)" = plogis(eta), "Gaussian (identity link)" = eta)
+y   <- switch(g_fam, "Poisson (log link)" = rpois(200, mu),
+              "Binomial (logit link)" = rbinom(200, 1, mu), "Gaussian (identity link)" = rnorm(200, mu, 1))
+lab <- switch(g_fam, "Poisson (log link)" = "log(mean count)",
+              "Binomial (logit link)" = "log-odds", "Gaussian (identity link)" = "mean")
+
+msg <- switch(g_fam,
+  "Poisson (log link)"      = sprintf("exp(β₁) = %.3f: each unit of x multiplies the expected count by %.3f (%+.1f%%)",
+                                      exp(g_b1), exp(g_b1), 100 * (exp(g_b1) - 1)),
+  "Binomial (logit link)"   = sprintf("exp(β₁) = %.3f: each unit of x multiplies the ODDS by %.3f; the change in probability depends on where you start",
+                                      exp(g_b1), exp(g_b1)),
+  "Gaussian (identity link)" = sprintf("β₁ = %.2f: each unit of x adds %.2f to the mean", g_b1, g_b1))
+cat(msg, "\n")
+
+par(mfrow = c(2, 1), mar = c(4, 4, 1, 1))
+plot(x, eta, type = "l", lwd = 2, col = "#3b5a8f", ylab = paste("Link scale:", lab), xlab = "")
+plot(x, y, pch = 16, col = adjustcolor("grey30", 0.5), ylab = "Response scale", xlab = "x")
+lines(x, mu, lwd = 2, col = "#3b5a8f")
+```
+
+::: {.small-note}
+In the Poisson case, a constant slope on the link scale becomes a curve that grows faster and faster on the response scale, and the scatter grows with the mean (variance = μ). In the binomial case the curve flattens near 0 and 1: the same odds ratio moves the probability a lot in the middle and hardly at all near the edges.
+:::
+
+## Exercises
+
+`quine` (school absence days, from `MASS`) is already loaded.
+
+### Q1 — A Gaussian GLM is `lm()`
+
+Fit `mpg ~ wt` with `lm()` and with `glm(family = gaussian())`. Confirm the coefficients, SEs and predictions match, and explain why they must.
+
+```{webr}
+#| exercise: m6q1
+lm_fit  <- lm(mpg ~ wt, data = mtcars)
+glm_fit <- glm(mpg ~ wt, family = ______(), data = mtcars)
+coef(lm_fit); coef(glm_fit)
+vcov(lm_fit); vcov(glm_fit)
+predict(lm_fit,  newdata = data.frame(wt = 3))
+predict(glm_fit, newdata = data.frame(wt = 3))
+```
+
+::: {.solution exercise="m6q1"}
+```r
+glm_fit <- glm(mpg ~ wt, family = gaussian(), data = mtcars)
+```
+With the identity link the linear predictor *is* the mean, and with Gaussian errors maximising the likelihood is the same as minimising the sum of squares, so least squares and maximum likelihood coincide.
+:::
+
+### Q2 — Link scale vs response scale
+
+Fit a Poisson GLM for `Days ~ Sex + Age`, convert the `SexM` coefficient to the response scale, and predict days absent for an F0 male and an F0 female, both by hand and with `predict()`.
+
+```{webr}
+#| exercise: m6q2
+fit <- glm(Days ~ Sex + Age, family = poisson(), data = quine)
+b <- coef(fit)
+b
+exp(b)
+
+# by hand: F0 is the reference age, so only the intercept and SexM matter
+c(male = exp(b["(Intercept)"] + b["______"]), female = exp(b["(Intercept)"]))
+
+newd <- data.frame(Sex = c("M", "F"), Age = c("F0", "F0"))
+predict(fit, newdata = newd, type = "______")
+```
+
+::: {.solution exercise="m6q2"}
+```r
+c(male = exp(b["(Intercept)"] + b["SexM"]), female = exp(b["(Intercept)"]))
+predict(fit, newdata = newd, type = "response")
+```
+`SexM` ≈ 0.105 and `exp(0.105) ≈ 1.11`: the fitted mean for boys is about **11% higher**, holding age group constant. This Poisson fit is badly overdispersed, so its SEs and p-values can't be trusted; Module 8 refits it with a negative binomial.
+:::
+
+### Q3 — Nested comparison with a likelihood-ratio test
+
+Does adding `Sex` to `Days ~ Age` improve the Poisson fit? Compare the LRT with AIC.
+
+```{webr}
+#| exercise: m6q3
+fit_a  <- glm(Days ~ Age, family = poisson(), data = quine)
+fit_ab <- glm(Days ~ Age + Sex, family = poisson(), data = quine)
+anova(fit_a, fit_ab, test = "______")
+AIC(fit_a, fit_ab)
+```
+
+::: {.solution exercise="m6q3"}
+```r
+anova(fit_a, fit_ab, test = "LRT")
+```
+Deviance drops by about 6.27 on 1 df (p ≈ 0.012) and AIC falls by about 4.27. Because `quine` is severely overdispersed, this Poisson LRT is anti-conservative: treat it as mechanics, and use Module 8's negative binomial for inference.
+:::
+
+### Q4 — Which family?
+
+Name the family, link and `glm()` call for: (1) responded yes/no; (2) seizures per patient per week; (3) an uncensored, positive, right-skewed waiting time; (4) successes out of 20 attempts; (5) proportion of a plate covered (strictly between 0 and 1). Try each on the simulated data below.
+
+```{webr}
+#| exercise: m6q4
+set.seed(1)
+df <- data.frame(x = runif(200))
+df$responded <- rbinom(200, 1, plogis(-1 + 2 * df$x))
+df$seizures  <- rpois(200, exp(1 + df$x))
+df$time      <- rgamma(200, shape = 2, rate = 2 / exp(1 + df$x))
+df$success   <- rbinom(200, 20, plogis(-0.5 + df$x)); df$failure <- 20 - df$success
+
+glm(responded ~ x, family = ______, data = df)
+glm(seizures ~ x, family = ______, data = df)
+glm(time ~ x, family = ______, data = df)
+glm(cbind(success, failure) ~ x, family = ______, data = df)
+```
+
+::: {.solution exercise="m6q4"}
+1. `glm(responded ~ x, family = binomial(), data = df)`
+2. `glm(seizures ~ x, family = poisson(), data = df)`; then check overdispersion, which is common in clinical counts.
+3. `glm(time ~ x, family = Gamma(link = "log"), data = df)`; if times can be censored, use survival analysis instead.
+4. `glm(cbind(success, failure) ~ x, family = binomial(), data = df)`
+5. Beta regression, `betareg::betareg(pct ~ x)`. It excludes exact 0s and 1s, which need a zero/one-inflated model instead.
+:::
+
+### Q5 — Simulate a Poisson GLM and recover it
+
+Simulate n = 500 with β₀ = 1, β₁ = 0.3 and x ~ Uniform(0, 5), fit the model, then repeat 1000 times to check the estimates are unbiased.
+
+```{webr}
+#| exercise: m6q5
+set.seed(2026)
+simulate_once <- function(n = 500, b0 = 1, b1 = 0.3) {
+  x <- runif(n, 0, 5)
+  y <- rpois(n, lambda = ______)
+  coef(glm(y ~ x, family = poisson()))
+}
+simulate_once()
+
+reps <- replicate(1000, simulate_once())
+rowMeans(reps)        # should be close to (1, 0.3)
+apply(reps, 1, sd)    # empirical SEs
+```
+
+::: {.solution exercise="m6q5"}
+```r
+y <- rpois(n, lambda = exp(b0 + b1 * x))
+```
+The averages land on (1, 0.3). Simulate under a truth you chose, refit, and see whether you get it back: the same pattern checks power, robustness and calibration.
+:::
+
+### Q6 — Deviance explained and McFadden's pseudo-R²
+
+For `fit_ab`, compute D² = 1 − residual/null deviance and McFadden's pseudo-R² = 1 − logLik(model)/logLik(null).
+
+```{webr}
+#| exercise: m6q6
+fit_ab <- glm(Days ~ Age + Sex, family = poisson(), data = quine)
+d2 <- 1 - fit_ab$______ / fit_ab$null.deviance
+
+fit_null <- update(fit_ab, . ~ 1)
+mcfadden <- 1 - as.numeric(logLik(fit_ab) / logLik(______))
+c(deviance_explained = d2, McFadden = mcfadden)
+```
+
+::: {.solution exercise="m6q6"}
+```r
+d2 <- 1 - fit_ab$deviance / fit_ab$null.deviance
+mcfadden <- 1 - as.numeric(logLik(fit_ab) / logLik(fit_null))
+```
+About 0.080 (D²) vs 0.062 (McFadden): different definitions, different numbers, and neither is the fraction of outcome variance explained. Always name which one you report.
+:::
+
+## Mini-project
+
+Build a Poisson GLM for `quine` with `Age`, `Sex`, `Eth` and `Lrn` plus any interactions you can justify. Show the LRT sequence, coefficients on both scales, predictions for two hypothetical students, deviance and pseudo-R², and a paragraph diagnosing overdispersion (residual deviance/df as a rough screen, Pearson dispersion as the main check).
+
+```{webr}
+#| caption: Sandbox
+fit <- glm(Days ~ Age + Sex + Eth + Lrn, family = poisson(), data = quine)
+sum(residuals(fit, type = "pearson")^2) / df.residual(fit)   # Pearson dispersion
+# your code here
+```

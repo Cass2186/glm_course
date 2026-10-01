@@ -1,0 +1,226 @@
+---
+title: "8 · Count GLMs and mixed models"
+subtitle: "Poisson, overdispersion, negative binomial, offsets, and random effects for clustered data"
+webr:
+  resources:
+    - data
+  cell-options:
+    fig-width: 7
+    fig-height: 4.2
+    timelimit: 180
+    persist: true
+  packages:
+    - MASS
+    - dplyr
+    - ggplot2
+    - broom
+    - emmeans
+    - performance
+    - lme4
+    - lmerTest
+---
+
+{{< include _extensions/live/_knitr.qmd >}}
+{{< include _setup.qmd >}}
+
+**Poisson regression** assumes E[y] = var(y) = λ with a log link; `exp(β)` is an expected-count ratio (a rate ratio when exposure is constant or handled with an offset).
+
+**Overdispersion**, variance larger than the mean, is the Poisson's usual failure mode (unmeasured heterogeneity, clustering, contagion, excess zeros). Ignored, it makes SEs, p-values and CIs far too optimistic. Screen with residual deviance/df, check with the Pearson dispersion or `performance::check_overdispersion()`, then fix with:
+
+- **quasi-Poisson**: same coefficients, SEs scaled by the estimated dispersion; no likelihood, so no AIC/LRT.
+- **negative binomial** (`MASS::glm.nb`): var = μ + μ²/θ, with a full likelihood.
+
+**Offsets** model rates: `glm(y ~ x + offset(log(exposure)), family = poisson())` forces a coefficient of 1 on log(exposure), so the other coefficients compare *rates*.
+
+**Mixed models** handle clustering (repeated measures, technical within biological replicates, herds, schools). `(1 | subject)` gives each subject its own random intercept drawn from a Normal distribution: `lmer()` for Gaussian outcomes, `glmer()` for binomial/Poisson. `lme4` omits p-values for `lmer()` on purpose; `lmerTest` adds Satterthwaite or Kenward–Roger df.
+
+## Explore: what overdispersion does to a Poisson test
+
+Two groups with the **same mean count** (5), generated from a negative binomial with dispersion θ. Small θ means lots of extra-Poisson variation (θ → ∞ is Poisson). Each test should reject 5% of the time.
+
+```{ojs}
+//| echo: false
+viewof od_theta = Inputs.range([0.5, 50], {value: 2, step: 0.5, label: "NB dispersion θ (smaller = more overdispersed)"})
+viewof od_n = Inputs.range([10, 100], {value: 30, step: 5, label: "Observations per group"})
+```
+
+```{webr}
+#| input:
+#|   - od_theta
+#|   - od_n
+#| caption: Overdispersion simulator (300 null experiments)
+#| autorun: true
+set.seed(8)
+g <- factor(rep(c("A", "B"), each = od_n))
+res <- replicate(300, {
+  y <- rnbinom(2 * od_n, mu = 5, size = od_theta)
+  pois  <- glm(y ~ g, family = poisson())
+  quasi <- glm(y ~ g, family = quasipoisson())
+  nb    <- suppressWarnings(MASS::glm.nb(y ~ g))
+  c(Poisson       = coef(summary(pois))[2, 4],
+    quasi_Poisson = coef(summary(quasi))[2, 4],
+    neg_binomial  = coef(summary(nb))[2, 4],
+    dispersion    = sum(residuals(pois, "pearson")^2) / df.residual(pois))
+})
+cat(sprintf("variance / mean in the data ≈ %.1f   mean Pearson dispersion ≈ %.1f\n",
+            1 + 5 / od_theta, mean(res["dispersion", ])))
+round(100 * rowMeans(res[1:3, ] < 0.05), 1)   # % false positives (should be 5)
+```
+
+::: {.small-note}
+At θ = 2 the variance is 3.5× the mean and the Poisson test rejects a true null about a quarter of the time. Quasi-Poisson and the negative binomial stay near 5%. Push θ toward 50 and all three agree, because the data are then nearly Poisson.
+:::
+
+## Exercises
+
+`quine` is loaded, and `blot` holds all 48 technical-replicate rows of the western blot data.
+
+### Q1 — Poisson and overdispersion
+
+Fit the full Poisson model for `quine` and diagnose overdispersion.
+
+```{webr}
+#| exercise: m8q1
+fit <- glm(Days ~ Age + Sex + Eth + Lrn, family = poisson(), data = quine)
+deviance(fit) / df.residual(fit)
+sum(residuals(fit, type = "______")^2) / df.residual(fit)
+check_overdispersion(fit)
+```
+
+::: {.solution exercise="m8q1"}
+```r
+sum(residuals(fit, type = "pearson")^2) / df.residual(fit)
+```
+Residual deviance/df ≈ 12.2 and the formal check confirms severe overdispersion. Poisson SEs are badly underestimated, so the Sex p-value would be far too small. (Don't read 12.2 literally as "12 times the variance".)
+:::
+
+### Q2 — The negative binomial fix
+
+Refit with `MASS::glm.nb()`, compare the SEs and AIC, and report the `SexM` rate ratio with a 95% CI.
+
+```{webr}
+#| exercise: m8q2
+fit_pois <- glm(Days ~ Age + Sex + Eth + Lrn, family = poisson(), data = quine)
+fit_nb   <- MASS::______(Days ~ Age + Sex + Eth + Lrn, data = quine)
+
+cbind(poisson_se = coef(summary(fit_pois))[, 2], nb_se = coef(summary(fit_nb))[, 2])
+AIC(fit_pois, fit_nb)
+exp(cbind(estimate = coef(fit_nb), confint(fit_nb)))["SexM", ]
+```
+
+::: {.solution exercise="m8q2"}
+```r
+fit_nb <- MASS::glm.nb(Days ~ Age + Sex + Eth + Lrn, data = quine)
+```
+NB SEs are several times larger and AIC drops by hundreds. The `SexM` rate ratio is close to 1 with a wide CI that includes 1: once overdispersion is handled there is no strong evidence for a Sex effect, although the naive Poisson fit declared one.
+:::
+
+### Q3 — Offsets for rates
+
+Cities vary 100-fold in population and the true policy effect on the crime *rate* is β = −0.3. Fit with and without an offset.
+
+```{webr}
+#| exercise: m8q3
+set.seed(2026)
+n_cities <- 100
+cities <- data.frame(policy     = rbinom(n_cities, 1, 0.5),
+                     population = round(exp(runif(n_cities, log(10000), log(1e6)))))
+cities$crimes <- rpois(n_cities, lambda = 0.001 * exp(-0.3 * cities$policy) * cities$population)
+
+no_offset   <- glm(crimes ~ policy, family = poisson(), data = cities)
+with_offset <- glm(crimes ~ policy + offset(______), family = poisson(), data = cities)
+coef(no_offset); coef(with_offset)
+```
+
+::: {.solution exercise="m8q3"}
+```r
+with_offset <- glm(crimes ~ policy + offset(log(population)), family = poisson(), data = cities)
+```
+Without the offset the policy coefficient mostly reflects chance imbalance in city size; with it, the model compares crime *rates* and recovers about −0.3.
+:::
+
+### Q4 — Warp breaks with `emmeans`
+
+Fit `breaks ~ wool * tension` and get response-scale marginal means and pairwise contrasts. Which tension gives the fewest breaks for each wool?
+
+```{webr}
+#| exercise: m8q4
+fit <- glm(breaks ~ wool * tension, family = poisson(), data = warpbreaks)
+coef(fit)
+emm <- emmeans(fit, ~ tension | wool, type = "______")
+emm
+pairs(emm)
+```
+
+::: {.solution exercise="m8q4"}
+```r
+emm <- emmeans(fit, ~ tension | wool, type = "response")
+```
+Wool A: medium tension is lowest (≈ 24.0 breaks), very close to high (≈ 24.6). Wool B: high tension is lowest (≈ 18.8). Check the pairwise intervals before claiming close means differ, and check this Poisson fit for overdispersion too.
+:::
+
+### Q5 — Binomial GLMM on `cbpp`
+
+Cattle herds are clusters. Fit a random-intercept binomial GLMM, read the herd variance, and compare the period SEs with an ordinary GLM.
+
+```{webr}
+#| exercise: m8q5
+cbpp <- lme4::cbpp
+fit_glmer <- glmer(cbind(incidence, size - incidence) ~ period + (1 | ______),
+                   family = binomial(), data = cbpp)
+summary(fit_glmer)
+VarCorr(fit_glmer)
+
+fit_glm <- glm(cbind(incidence, size - incidence) ~ period, family = binomial(), data = cbpp)
+cbind(glmer_se = coef(summary(fit_glmer))[, 2], glm_se = coef(summary(fit_glm))[, 2])
+```
+
+::: {.solution exercise="m8q5"}
+```r
+fit_glmer <- glmer(cbind(incidence, size - incidence) ~ period + (1 | herd),
+                   family = binomial(), data = cbpp)
+```
+The herd SD is about 0.64 on the log-odds scale. Period SEs are only modestly larger than the GLM's (period 2: ≈ 0.303 vs 0.291). The main issue is that the ordinary GLM assumes independence and can't represent between-herd heterogeneity, not that every GLMM SE must be bigger.
+:::
+
+### Q6 — Western blot with a biological-replicate random intercept
+
+Model all 48 rows with a random intercept per biological replicate. Estimate the share of variance between biological replicates, compare SEs with the averaged `lm`, and run Dunnett-style contrasts.
+
+```{webr}
+#| exercise: m8q6
+blot$Bio_ID <- factor(paste(blot$Genotype, blot$Bio_Rep, sep = "_"))   # unique IDs
+nlevels(blot$Bio_ID)
+
+fit_mixed <- lmer(log(Ratio) ~ Genotype + (1 | ______), data = blot)
+summary(fit_mixed)
+
+vc <- as.data.frame(VarCorr(fit_mixed))
+vc$vcov[1] / sum(vc$vcov)    # ICC
+
+fit_avg <- lm(log(Ratio) ~ Genotype, data = blot_bio)
+cbind(mixed_se = coef(summary(fit_mixed))[, 2], averaged_se = coef(summary(fit_avg))[, 2])
+
+emm <- emmeans(fit_mixed, ~ Genotype, lmer.df = "satterthwaite")
+contrast(emm, method = "trt.vs.ctrl", ref = "WT", adjust = "mvt")
+```
+
+::: {.hint exercise="m8q6"}
+The grouping factor is `Bio_ID`. Bio_Rep numbers restart at 1 in every genotype, so `Bio_Rep` on its own would wrongly lump "WT rep 1" with "KO rep 1".
+:::
+
+::: {.solution exercise="m8q6"}
+```r
+fit_mixed <- lmer(log(Ratio) ~ Genotype + (1 | Bio_ID), data = blot)
+```
+Bio-rep variance ≈ 0.00272 and residual ≈ 0.000327 on the log scale, an ICC of ≈ 0.89. The mixed-model and averaged SEs are virtually identical (KO: ≈ 0.03761 vs 0.03762), as expected in this balanced design. The mixed model keeps the measurement-level rows without pretending they're independent, shows both variance components, and extends to imbalance or measurement-level covariates. Neither approach rescues too few biological replicates or unmodelled blot/batch effects.
+:::
+
+## Mini-project
+
+For `quine`: Poisson and NB versions of the full model, the overdispersion diagnostic, NB rate ratios with CIs, predictions with 95% intervals for two students, and a paragraph on how you'd extend it to a mixed model if the data came from several schools.
+
+```{webr}
+#| caption: Sandbox
+# your code here
+```

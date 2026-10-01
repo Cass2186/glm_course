@@ -1,0 +1,127 @@
+---
+title: "9 · Capstone"
+subtitle: "From raw data to a defensible, reproducible analysis, with no scaffolding"
+webr:
+  resources:
+    - data
+  cell-options:
+    fig-width: 7
+    fig-height: 4.2
+    timelimit: 300
+    persist: true
+  packages:
+    - MASS
+    - dplyr
+    - tidyr
+    - ggplot2
+    - broom
+    - car
+    - multcomp
+    - emmeans
+    - pROC
+    - ISLR2
+---
+
+{{< include _extensions/live/_knitr.qmd >}}
+{{< include _setup.qmd >}}
+
+The paths, working guidelines and rubric are in the Obsidian note. This page gives you a workspace with everything loaded and a starting template for each path.
+
+| Path | Question | Deliverable |
+|---|---|---|
+| **A** · Western blot | Your own densitometry, or the course CSV as a dry run | Manuscript figure + stats and methods paragraphs |
+| **B** · Binary classification | `ISLR2::Default` or any binary outcome with n ≳ 500 | Held-out ROC, calibration, cost-based threshold |
+| **C** · Simulation study | How badly does the MLE behave under separation, and does Firth fix it? | Bias and coverage curves + recommendations |
+
+Write your analysis plan (model, contrasts, multiplicity, exclusions) **before** you run anything below.
+
+## Path A template: western blot
+
+Runs on the included CSV. To use your own data, paste it in as a data frame with the same columns (Genotype, Bio_Rep, Tech_Rep, Target_Intensity, Loading_Control_Intensity).
+
+```{webr}
+#| caption: Path A template
+#| max-lines: 40
+d <- read.csv("data/western_blot_example.csv") |>
+  mutate(Ratio    = Target_Intensity / Loading_Control_Intensity,
+         Genotype = factor(Genotype, levels = c("WT", "HET", "KO", "RESCUE")))
+d_bio <- d |> group_by(Genotype, Bio_Rep) |> summarise(Ratio = mean(Ratio), .groups = "drop")
+print(table(d_bio$Genotype))                          # n per group = biological replicates
+
+fit <- lm(log(Ratio) ~ Genotype, data = d_bio)        # prespecified: log scale
+anova(fit)
+emm <- emmeans(fit, ~ Genotype, type = "response")
+contrast(emm, method = "trt.vs.ctrl", ref = "WT") |> summary(infer = TRUE)   # ratios vs WT
+
+ggplot(d_bio, aes(Genotype, Ratio)) +
+  geom_jitter(width = 0.12, size = 2.5, alpha = 0.8) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.2) +
+  stat_summary(fun = mean, geom = "crossbar", width = 0.45) +
+  labs(y = "Target / loading control (a.u.)")
+```
+
+## Path B template: held-out logistic regression
+
+```{webr}
+#| caption: Path B template
+#| max-lines: 40
+set.seed(2026)
+idx   <- sample(nrow(Default), 0.7 * nrow(Default))
+train <- Default[idx, ]; test <- Default[-idx, ]
+
+fit <- glm(default ~ balance + income + student, family = binomial(), data = train)
+tidy(fit, exponentiate = TRUE, conf.int = TRUE)
+
+p_test <- predict(fit, newdata = test, type = "response")
+auc(roc(test$default, p_test, quiet = TRUE))          # held-out AUC
+
+# calibration: observed default rate within deciles of predicted risk
+cal <- data.frame(p = p_test, y = test$default == "Yes") |>
+  mutate(bin = ntile(p, 10)) |>
+  group_by(bin) |> summarise(predicted = mean(p), observed = mean(y))
+ggplot(cal, aes(predicted, observed)) + geom_abline(linetype = 2) + geom_point(size = 2) + geom_line()
+```
+
+## Path C: explore separation before you simulate properly
+
+n = 20 observations and one binary predictor with true log-odds ratio β. Watch how often the ordinary MLE "escapes" (|β̂| > 10) as β grows. The full study also fits `logistf` and tracks coverage; start from the workspace below.
+
+```{ojs}
+//| echo: false
+viewof sep_beta = Inputs.range([0, 5], {value: 2, step: 0.25, label: "True β"})
+viewof sep_n = Inputs.range([10, 100], {value: 20, step: 2, label: "n"})
+```
+
+```{webr}
+#| input:
+#|   - sep_beta
+#|   - sep_n
+#| caption: Separation explorer (500 simulations)
+#| autorun: true
+set.seed(99)
+x <- rep(0:1, length.out = sep_n)
+est <- replicate(500, {
+  y <- rbinom(sep_n, 1, plogis(-1 + sep_beta * x))
+  suppressWarnings(coef(glm(y ~ x, family = binomial()))[2])
+})
+ok <- abs(est) <= 10
+cat(sprintf("MLE escaped (|b| > 10) in %.1f%% of fits\nmedian estimate when finite: %.2f (truth %.2f)\n",
+            100 * mean(!ok), median(est[ok]), sep_beta))
+hist(est[ok], breaks = 40, main = "Finite MLEs", xlab = "estimated β")
+abline(v = sep_beta, col = "red", lwd = 2)
+```
+
+## Your workspace
+
+```{webr}
+#| caption: Workspace
+#| min-lines: 12
+# Path C starter:
+# if (!requireNamespace("logistf", quietly = TRUE)) webr::install("logistf")
+# for each beta in seq(0, 5, by = 0.5): 1000 sims of glm() vs logistf::logistf(),
+# record estimate, CI and whether the CI covers beta, then plot bias and coverage.
+```
+
+## After the capstone
+
+You now have a workflow for the four biggest situations in applied research: continuous outcomes and group differences (Modules 3–4), binary outcomes (Module 7), counts with varying exposure (Module 8), and non-independent observations (the mixed-models part of Module 8). For what's not covered: survival analysis (`survival`), Bayesian regression (`rstanarm`, *Regression and Other Stories*), and multiple testing / FDR (`p.adjust(method = "BH")`).

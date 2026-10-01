@@ -1,0 +1,225 @@
+---
+title: "5 · Regression diagnostics"
+subtitle: "Residual plots, leverage and influence, VIF, heteroscedasticity and transformations"
+webr:
+  resources:
+    - data
+  cell-options:
+    fig-width: 7
+    fig-height: 4.2
+    timelimit: 180
+    persist: true
+  packages:
+    - MASS
+    - dplyr
+    - ggplot2
+    - broom
+    - car
+    - multcomp
+    - sandwich
+    - lmtest
+---
+
+{{< include _extensions/live/_knitr.qmd >}}
+{{< include _setup.qmd >}}
+
+Everyone shows their p-values; almost nobody shows their diagnostics. The assumptions of a linear model, from hardest to fix to least critical:
+
+1. **Independence** of errors: broken by repeated measures, nesting, time and space.
+2. **Linearity** of the mean function.
+3. **Homoscedasticity**: constant residual variance.
+4. **Normality** of errors: least critical; large-n inference on β is robust to it.
+
+| `plot(fit)` panel | Checks | Bad sign |
+|---|---|---|
+| Residuals vs Fitted | linearity, equal variance | a curve (missing nonlinearity) or a funnel |
+| Q-Q | normality | points peeling away at the ends |
+| Scale-Location | equal variance | a rising trend |
+| Residuals vs Leverage | influence | points beyond the Cook's distance 0.5 / 1 contours |
+
+**Leverage** is how unusual a point's *predictors* are (`hatvalues`); the **residual** is how far it is from the line; **influence** (Cook's distance) combines both: how much the fit changes without that point. **VIF** measures how much collinearity inflates a coefficient's variance; above 10 deserves a look, but never drop a needed confounder just to lower it. For **heteroscedasticity**: transform (log for positive, order-of-magnitude data), use robust HC3 standard errors, or model the variance.
+
+## Explore: one point, three ideas
+
+Twenty well-behaved points plus one red point you control. Watch the difference between leverage (far out in x), a large residual (far from the line) and influence (both at once).
+
+```{ojs}
+//| echo: false
+viewof inf_x = Inputs.range([0, 30], {value: 5, step: 0.5, label: "Red point: x"})
+viewof inf_y = Inputs.range([-10, 30], {value: 5, step: 0.5, label: "Red point: y"})
+```
+
+```{webr}
+#| input:
+#|   - inf_x
+#|   - inf_y
+#| caption: Influence explorer
+#| autorun: true
+set.seed(4)
+x <- runif(20, 0, 10); y <- 2 + 0.5 * x + rnorm(20, 0, 1)
+d <- data.frame(x = c(x, inf_x), y = c(y, inf_y), red = rep(c(FALSE, TRUE), c(20, 1)))
+
+fit_all  <- lm(y ~ x, data = d)
+fit_drop <- lm(y ~ x, data = d[!d$red, ])
+i <- nrow(d)
+cat(sprintf("leverage h = %.2f (2p/n = %.2f)   studentized residual = %.2f   Cook's D = %.2f (4/n = %.2f)\nslope with point = %.2f   without = %.2f\n",
+            hatvalues(fit_all)[i], 2 * 2 / i, rstudent(fit_all)[i],
+            cooks.distance(fit_all)[i], 4 / i, coef(fit_all)[2], coef(fit_drop)[2]))
+
+ggplot(d, aes(x, y)) +
+  geom_abline(intercept = coef(fit_drop)[1], slope = coef(fit_drop)[2], linetype = 2, colour = "grey40") +
+  geom_abline(intercept = coef(fit_all)[1],  slope = coef(fit_all)[2],  colour = "#3b5a8f", linewidth = 1) +
+  geom_point(aes(colour = red), size = 3, show.legend = FALSE) +
+  scale_colour_manual(values = c("grey20", "red")) +
+  coord_cartesian(xlim = c(0, 30), ylim = c(-10, 30)) +
+  labs(subtitle = "solid: fit with the red point   dashed: fit without it")
+```
+
+::: {.small-note}
+Move x to 28 with y on the dashed line (about 17): huge leverage, tiny residual, little influence. Then drop y to 0: the same leverage now drags the whole line, and Cook's D explodes. A point in the middle of x with a big residual barely moves the slope.
+:::
+
+## Exercises
+
+### Q1 — Read the four plots
+
+Fit `mpg ~ wt + hp` and write one sentence per panel.
+
+```{webr}
+#| exercise: m5q1
+#| fig-height: 6
+fit <- lm(mpg ~ wt + hp, data = mtcars)
+par(mfrow = c(2, 2)); plot(______); par(mfrow = c(1, 1))
+```
+
+::: {.solution exercise="m5q1"}
+```r
+par(mfrow = c(2, 2)); plot(fit); par(mfrow = c(1, 1))
+```
+1. **Residuals vs Fitted**: mild curvature, suggesting some nonlinearity in `wt` or `hp`. Not severe.
+2. **Q-Q**: mostly on the line, with a couple of high outliers (Toyota Corolla, Fiat 128).
+3. **Scale-Location**: slight upward trend, a hint of heteroscedasticity.
+4. **Residuals vs Leverage**: the Chrysler Imperial combines high leverage with a sizeable residual. Check whether it changes conclusions.
+:::
+
+### Q2 — Hunt down influential points
+
+Flag observations with Cook's D > 4/n, refit without them and compare coefficients. Should you drop them?
+
+```{webr}
+#| exercise: m5q2
+fit <- lm(mpg ~ wt + hp, data = mtcars)
+n  <- nrow(mtcars)
+cd <- ______(fit)
+flagged <- which(cd > 4 / n)
+mtcars[flagged, c("mpg", "wt", "hp")]
+
+fit_trim <- lm(mpg ~ wt + hp, data = mtcars[-flagged, ])
+tidy(fit)
+tidy(fit_trim)
+```
+
+::: {.solution exercise="m5q2"}
+```r
+cd <- cooks.distance(fit)
+```
+The flagged cars include the Corolla (very high mpg for its weight) and the Chrysler Imperial (heavy and thirsty); the `wt` slope shifts when they're removed. **Never** drop points to improve p-values. Drop them only for a substantive reason (measurement error, wrong population, coding error); otherwise report both fits as a sensitivity analysis.
+:::
+
+### Q3 — VIF
+
+Fit `mpg ~ .`, find the VIF offenders, and drop the largest one at a time until everything is below 5.
+
+```{webr}
+#| exercise: m5q3
+full <- lm(mpg ~ ., data = mtcars)
+round(vif(full), 1)
+
+step1 <- update(full, . ~ . - ______)
+round(vif(step1), 1)
+# keep going: step2 <- update(step1, . ~ . - ...)
+```
+
+::: {.solution exercise="m5q3"}
+```r
+step1 <- update(full, . ~ . - disp); vif(step1)
+step2 <- update(step1, . ~ . - cyl); vif(step2)
+step3 <- update(step2, . ~ . - wt);  vif(step3)   # hp still just above 5
+step4 <- update(step3, . ~ . - hp);  vif(step4)   # all below 5
+```
+`disp` (≈ 21.6), `cyl` (≈ 15.4) and `wt` (≈ 15.2) start above 10, `hp` just below. This mechanical sequence is not a model-building recipe: keep the variables your scientific question needs, because dropping a confounder biases the others.
+:::
+
+### Q4 — When to log-transform
+
+Compare `price ~ carat` with `log(price) ~ log(carat)` on the diamonds data, and interpret the log-log slope.
+
+```{webr}
+#| exercise: m5q4
+#| fig-height: 3.8
+fit1 <- lm(price ~ carat, data = ggplot2::diamonds)
+fit2 <- lm(______ ~ ______, data = ggplot2::diamonds)
+par(mfrow = c(1, 2)); plot(fit1, which = 1); plot(fit2, which = 1); par(mfrow = c(1, 1))
+coef(fit2)
+```
+
+::: {.solution exercise="m5q4"}
+```r
+fit2 <- lm(log(price) ~ log(carat), data = ggplot2::diamonds)
+```
+The raw fit has an obvious funnel; the log-log fit is much more even. The slope ≈ 1.68 is an **elasticity**: a 1% increase in carat is associated with about a 1.68% increase in price. The log transform linearises the curve and stabilises the variance in one move.
+:::
+
+### Q5 — Western blot diagnostics revisited
+
+Compare diagnostics for the raw and log-scale blot ANOVAs and check that the Dunnett conclusion survives on the log scale.
+
+```{webr}
+#| exercise: m5q5
+#| fig-height: 6
+fit_raw <- lm(Ratio ~ Genotype, data = blot_bio)
+fit_log <- lm(log(Ratio) ~ Genotype, data = blot_bio)
+par(mfrow = c(2, 2)); plot(fit_raw); plot(fit_log); par(mfrow = c(1, 1))
+
+shapiro.test(residuals(fit_raw)); shapiro.test(residuals(fit_log))
+leveneTest(Ratio ~ Genotype, data = blot_bio)
+leveneTest(log(Ratio) ~ Genotype, data = blot_bio)
+
+summary(multcomp::glht(aov(______ ~ Genotype, data = blot_bio),
+                       linfct = multcomp::mcp(Genotype = "Dunnett")))
+```
+
+::: {.solution exercise="m5q5"}
+```r
+summary(multcomp::glht(aov(log(Ratio) ~ Genotype, data = blot_bio),
+                       linfct = multcomp::mcp(Genotype = "Dunnett")))
+```
+With n = 4 per group both scales look reasonable (Shapiro–Wilk p ≈ 0.77 raw, ≈ 0.90 log); these low-power tests can't prove normality, so the plots matter more. Both scales agree on KO vs WT, with a KO/WT geometric-mean ratio of `exp(-0.84) ≈ 0.43`.
+:::
+
+### Q6 — Robust standard errors
+
+Keep `price ~ carat` on the natural scale, but get HC3 robust SEs.
+
+```{webr}
+#| exercise: m5q6
+fit <- lm(price ~ carat, data = ggplot2::diamonds)
+coef(summary(fit))
+coeftest(fit, vcov = vcovHC(fit, type = "______"))
+```
+
+::: {.solution exercise="m5q6"}
+```r
+coeftest(fit, vcov = vcovHC(fit, type = "HC3"))
+```
+The estimates are identical (robust SEs don't change point estimates), but the `carat` SE grows substantially: the naive SE assumed constant variance. The effect is so large that p stays tiny, but the inflation would matter for a subtler effect.
+:::
+
+## Mini-project
+
+Take your Module 4 penguin model and write up its diagnostics: the four plots with a sentence each, Cook's distance and a sensitivity refit, a VIF table, Shapiro–Wilk with a comment on whether normality matters at this n, `car::ncvTest(fit)`, and a paragraph defending the model to a reviewer.
+
+```{webr}
+#| caption: Sandbox
+# your code here
+```

@@ -1,0 +1,246 @@
+---
+title: "0 · R syntax primer"
+subtitle: "Assignment, subsetting, factors, formulas, pipes and functions"
+webr:
+  resources:
+    - data
+  cell-options:
+    fig-width: 7
+    fig-height: 4.2
+    timelimit: 180
+    persist: true
+  packages:
+    - MASS
+    - dplyr
+    - ggplot2
+---
+
+{{< include _extensions/live/_knitr.qmd >}}
+{{< include _setup.qmd >}}
+
+A quick reference for R's syntax quirks before Module 1. Skim if you're comfortable; come back whenever a later module uses something you don't recognise. The goal is that when you see something like the line below, you can read what's happening.
+
+```r
+blot |> filter(Genotype == "WT") |> pull(Ratio)
+```
+
+## Try it: the syntax in one box
+
+Run this, then change things and run it again. Nothing here can break anything.
+
+```{webr}
+#| caption: Syntax playground
+x <- c(a = 10, b = 20, c = 30, d = 40)   # a named numeric vector
+x + 1                                   # vectorised arithmetic
+x[x > 15]                               # logical subsetting
+c(1, 2, 3, 4) + c(10, 20)               # recycling: 11 22 13 24
+
+df <- data.frame(Genotype = c("WT", "WT", "KO", "KO"),
+                 Value    = c(1.0, 1.1, 0.4, 0.5))
+str(df)
+df$Value          # a vector
+df["Value"]       # still a data frame
+mean(c(1, 2, NA), na.rm = TRUE)
+```
+
+## Cheat sheet
+
+| Topic | The thing to remember |
+|---|---|
+| Assignment | `x <- 5`. Keep `=` for named arguments inside function calls. |
+| Types | `numeric`, `integer` (`3L`), `character`, `logical` (`TRUE`/`FALSE`, never `T`/`F`), `factor`, `NA`. Check with `class()` and `str()`. |
+| Vectors | Everything is a vector; arithmetic is vectorised; shorter vectors are **recycled**. |
+| Subsetting | `$` and `[[...]]` pull a column out as a vector; a single `[...]` keeps you in data-frame world. `x[-1]` drops the first element. |
+| Factors | Level order sets the reference level. Set it yourself: `factor(g, levels = c("WT", "HET", "KO", "RESCUE"))`. Use `droplevels()` after filtering. |
+| Formulas | `y ~ x + z` main effects; `y ~ x * z` adds `x:z`; `y ~ .` all other columns; `- 1` removes the intercept. |
+| Pipes | `a |> f() |> g()` reads left to right and means `g(f(a))`. |
+| Functions | `f <- function(x, na.rm = TRUE) { ... }`; the last expression is returned. `...` passes extra arguments along. |
+| NA | Viral: `mean(c(1, NA))` is `NA`. Test with `is.na()`, never `== NA`. |
+| Packages | `install.packages()` once, `library()` each session, or `pkg::fun()` without loading. |
+| Help | `?mean`, `?"["`, `??anova`. |
+
+### Common gotchas
+
+| Gotcha | Fix |
+|---|---|
+| Numeric columns import from CSV as character | `str(df)` to check types; `type.convert()` |
+| Factor levels in the wrong (alphabetical) order | `factor(x, levels = c(...))` explicitly |
+| `mean(x)` returns `NA` | Add `na.rm = TRUE` |
+| Single `[...]` returns a data frame, not a vector | Use `[[...]]` or `$` |
+| Comparing to `NA` with `==` returns `NA` | Use `is.na()` |
+| Row names silently dropped after subsetting | Move IDs into a real column |
+
+## Exercises
+
+Short warm-ups. If any takes more than a minute, that's the section of the cheat sheet to reread.
+
+### Q1 — Vector subsetting
+
+Using `x`, produce: (1) the element named `"c"`; (2) all elements greater than 25; (3) every element except `"a"`; (4) the elements at positions 2 and 4.
+
+```{webr}
+#| exercise: m0q1
+x <- c(a = 10, b = 20, c = 30, d = 40, e = 50)
+
+x[______]         # 1. by name
+x[x ______ 25]    # 2. by logical condition
+x[______]         # 3. everything except the first
+x[c(______)]      # 4. by position
+```
+
+::: {.hint exercise="m0q1"}
+Names go in quotes. A negative index drops that position. Several positions go inside `c()`.
+:::
+
+::: {.solution exercise="m0q1"}
+```r
+x["c"]           # named
+x[x > 25]        # logical
+x[-1]            # negative indexing
+x[c(2, 4)]       # positional
+```
+:::
+
+### Q2 — Data frame access, four ways
+
+Extract the `value` column as a **vector** using four different syntaxes. Then run `class()` on `df["value"]` to see why it isn't one of them.
+
+```{webr}
+#| exercise: m0q2
+df <- data.frame(id = 1:5, value = c(2.1, 3.4, 5.6, 7.8, 9.0))
+
+df$______
+df[["______"]]
+df[, "______"]
+df[, ______]
+
+class(df["value"])
+```
+
+::: {.solution exercise="m0q2"}
+```r
+df$value
+df[["value"]]
+df[, "value"]
+df[, 2]
+```
+`df["value"]` and `df[, "value", drop = FALSE]` return a **one-column data frame**, not a vector. This distinction bites people constantly.
+:::
+
+### Q3 — Factors and reference levels
+
+Turn `g` into a factor with **WT as the reference level** and the order WT → HET → KO → RESCUE, then confirm with `levels()`. Compare with what `factor(g)` does on its own.
+
+```{webr}
+#| exercise: m0q3
+g <- c("KO", "WT", "HET", "RESCUE", "WT", "KO")
+
+levels(factor(g))     # R's default: alphabetical
+
+gf <- factor(g, levels = ______)
+levels(gf)
+```
+
+::: {.hint exercise="m0q3"}
+`levels = c("WT", "HET", "KO", "RESCUE")`
+:::
+
+::: {.solution exercise="m0q3"}
+```r
+gf <- factor(g, levels = c("WT", "HET", "KO", "RESCUE"))
+levels(gf)
+```
+The default puts `HET` first, so every regression coefficient would be relative to HET instead of WT.
+:::
+
+### Q4 — Chain with the pipe
+
+Using `mtcars` and the native pipe, write **one** pipeline that keeps cars with `cyl == 6`, selects `mpg`, `hp` and `wt`, sorts by descending `mpg`, and returns the top 3 rows.
+
+```{webr}
+#| exercise: m0q4
+mtcars |>
+  filter(______) |>
+  select(______) |>
+  arrange(______) |>
+  head(3)
+```
+
+::: {.hint exercise="m0q4"}
+`filter(cyl == 6)`, `select(mpg, hp, wt)`, `arrange(desc(mpg))`.
+:::
+
+::: {.solution exercise="m0q4"}
+```r
+mtcars |>
+  filter(cyl == 6) |>
+  select(mpg, hp, wt) |>
+  arrange(desc(mpg)) |>
+  head(3)
+```
+:::
+
+### Q5 — Write a function
+
+Write `mean_ci(x, level = 0.95)` returning a named vector with the mean and the lower and upper bounds of a Normal-approximation confidence interval. Handle `NA`s.
+
+```{webr}
+#| exercise: m0q5
+mean_ci <- function(x, level = 0.95) {
+  x  <- x[______]
+  m  <- mean(x)
+  se <- sd(x) / sqrt(______)
+  z  <- qnorm(1 - (1 - level) / 2)
+  c(mean = m, lower = ______, upper = ______)
+}
+
+set.seed(1)
+mean_ci(rnorm(30, 10, 2))
+mean_ci(c(rnorm(30, 10, 2), NA), level = 0.9)
+```
+
+::: {.hint exercise="m0q5"}
+Keep non-missing values with `!is.na(x)`. The SE divides by `sqrt(length(x))`. The bounds are `m - z * se` and `m + z * se`.
+:::
+
+::: {.solution exercise="m0q5"}
+```r
+mean_ci <- function(x, level = 0.95) {
+  x  <- x[!is.na(x)]
+  m  <- mean(x)
+  se <- sd(x) / sqrt(length(x))
+  z  <- qnorm(1 - (1 - level) / 2)
+  c(mean = m, lower = m - z * se, upper = m + z * se)
+}
+```
+:::
+
+### Q6 — Read a formula
+
+Without running anything, say what each formula means: (1) `y ~ x + z`, (2) `y ~ x * z`, (3) `y ~ . - id`, (4) `log(y) ~ x - 1`. Then check yourself: `model.matrix()` shows the columns R actually builds.
+
+```{webr}
+#| exercise: m0q6
+d <- data.frame(y = c(2, 4, 6, 9), x = c(1, 2, 3, 4), z = c(0, 1, 0, 1), id = 1:4)
+
+colnames(model.matrix(y ~ x + z, data = d))
+colnames(model.matrix(y ~ x * z, data = d))
+colnames(model.matrix(y ~ . - id, data = d))
+colnames(model.matrix(log(y) ~ x - 1, data = d))
+```
+
+::: {.solution exercise="m0q6"}
+1. `y` explained by main effects of `x` and `z` (no interaction).
+2. `y` explained by main effects **and** the `x:z` interaction.
+3. `y` explained by all other columns in `data` **except** `id`.
+4. `log(y)` explained by `x` with **no intercept** (the fitted `log(y)` is forced through 0 when `x = 0`).
+:::
+
+## Sandbox
+
+No mini-project for Module 0. Skim it, do the warm-ups, then move on to [Module 1](M1.qmd).
+
+```{webr}
+#| caption: Sandbox
+# anything you want to try: ?mean, str(mtcars), class(TRUE), ...
+```

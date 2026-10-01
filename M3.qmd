@@ -1,0 +1,263 @@
+---
+title: "3 · Classical inference"
+subtitle: "t-tests, ANOVA, post-hocs, χ² and correlation, with the western blot case study"
+webr:
+  resources:
+    - data
+  cell-options:
+    fig-width: 7
+    fig-height: 4.2
+    timelimit: 180
+    persist: true
+  packages:
+    - MASS
+    - dplyr
+    - ggplot2
+    - broom
+    - car
+    - multcomp
+    - emmeans
+---
+
+{{< include _extensions/live/_knitr.qmd >}}
+{{< include _setup.qmd >}}
+
+This module uses your western blot workflow as the running example. `blot_bio` (16 rows, one per biological replicate, technical replicates averaged, WT as reference) is already loaded, exactly as you built it in Module 1 Q5.
+
+**Which t-test?** One group vs a value → `t.test(x, mu = value)`. Two independent groups → **Welch's** (`t.test(x, y)`, R's default). Same subjects measured twice → `t.test(x, y, paired = TRUE)`. Default to Welch's: it costs almost nothing when variances are equal and saves you when they aren't (Module 2).
+
+**ANOVA is a linear model with a categorical predictor.** `aov(Ratio ~ Genotype)` and `anova(lm(Ratio ~ Genotype))` give the same F and p, and the `GenotypeKO` coefficient is literally mean(KO) − mean(WT).
+
+**Assumptions**, in order of how much they hurt:
+
+1. **Independence.** Technical replicates are *not* independent. Average them first or model the nesting (Module 8).
+2. **Normality of residuals** (not of the raw data).
+3. **Equal variances** across groups.
+
+Formal tests (`shapiro.test`, `car::leveneTest`) have little power at n = 4 per group: a large p is not evidence the assumption holds, so look at the plots too. When assumptions fail: log-transform (multiplicative biology), Welch's ANOVA (`oneway.test`), or Kruskal–Wallis.
+
+| Post-hoc | Compares | Use when |
+|---|---|---|
+| Tukey HSD | all pairs | you genuinely care about every pair |
+| Dunnett | each group vs one control | you have a natural control (WT); more powerful for those planned contrasts |
+| Bonferroni | any set of tests | simple and always valid, often conservative |
+
+## Explore: technical replicates are not n
+
+Each simulated experiment compares two genotypes with **no true difference**. The "tech reps as n" test treats every lane as independent; the "average first" test uses one value per biological replicate. The ICC is how much of the variation sits between biological replicates rather than between technical repeats of the same sample.
+
+```{ojs}
+//| echo: false
+viewof b_bio = Inputs.range([2, 10], {value: 4, step: 1, label: "Biological reps per genotype"})
+viewof b_tech = Inputs.range([1, 8], {value: 3, step: 1, label: "Technical reps per biological rep"})
+viewof b_icc = Inputs.range([0, 0.99], {value: 0.89, step: 0.01, label: "ICC (between-bio-rep share of variance)"})
+```
+
+```{webr}
+#| input:
+#|   - b_bio
+#|   - b_tech
+#|   - b_icc
+#| caption: Pseudoreplication simulator (1000 null experiments)
+#| autorun: true
+set.seed(1)
+one_blot <- function() {
+  bio <- rnorm(2 * b_bio, 0, sqrt(b_icc))
+  d <- data.frame(Bio = rep(seq_len(2 * b_bio), each = b_tech),
+                  Genotype = rep(c("WT", "KO"), each = b_bio * b_tech))
+  d$y <- bio[d$Bio] + rnorm(nrow(d), 0, sqrt(1 - b_icc))
+  avg <- aggregate(y ~ Bio + Genotype, data = d, FUN = mean)
+  c(tech_reps_as_n = t.test(y ~ Genotype, data = d)$p.value,
+    average_first  = t.test(y ~ Genotype, data = avg)$p.value)
+}
+p <- replicate(1000, one_blot())
+round(100 * rowMeans(p < 0.05), 1)   # % false positives (should be 5)
+```
+
+::: {.small-note}
+The default ICC (0.89) is what Module 8 estimates for the included blot data. With 3 technical replicates the "tech reps as n" test gives false positives several times more often than 5%. Adding technical replicates makes it *worse*, while adding biological replicates is the only thing that buys real information.
+:::
+
+## Exercises
+
+### Q1 — WT vs KO, three ways
+
+Subset to WT and KO, then run Welch's t-test, Student's t-test and a one-way ANOVA. Which two p-values are identical, and why?
+
+```{webr}
+#| exercise: m3q1
+two_groups <- blot_bio |>
+  filter(Genotype %in% c("WT", "KO")) |>
+  mutate(Genotype = ______(Genotype))
+
+t.test(Ratio ~ Genotype, data = two_groups)                     # Welch's
+t.test(Ratio ~ Genotype, data = two_groups, var.equal = ______)  # Student's
+summary(aov(Ratio ~ Genotype, data = two_groups))               # ANOVA
+```
+
+::: {.hint exercise="m3q1"}
+`droplevels()` removes the unused HET and RESCUE levels, otherwise downstream tools may complain. Student's is `var.equal = TRUE`.
+:::
+
+::: {.solution exercise="m3q1"}
+```r
+two_groups <- blot_bio |>
+  filter(Genotype %in% c("WT", "KO")) |>
+  mutate(Genotype = droplevels(Genotype))
+t.test(Ratio ~ Genotype, data = two_groups, var.equal = TRUE)
+```
+Student's t and the two-group ANOVA give **exactly the same p-value** because F = t² with two groups. Welch's differs slightly because it adjusts the degrees of freedom. The effect is huge (KO mean ≈ 43% of WT), so all three are highly significant.
+:::
+
+### Q2 — One-way ANOVA on all four genotypes
+
+Fit the ANOVA with `aov()` and with `lm()` + `anova()`, confirm F and p match, and interpret each `lm()` coefficient in the data's units.
+
+```{webr}
+#| exercise: m3q2
+aov_fit <- aov(Ratio ~ Genotype, data = blot_bio)
+summary(aov_fit)
+
+lm_fit <- lm(Ratio ~ ______, data = blot_bio)
+______(lm_fit)
+tidy(lm_fit)
+
+tapply(blot_bio$Ratio, blot_bio$Genotype, mean)   # compare with the coefficients
+```
+
+::: {.solution exercise="m3q2"}
+```r
+lm_fit <- lm(Ratio ~ Genotype, data = blot_bio)
+anova(lm_fit)
+```
+With WT as the reference: `(Intercept)` = mean(WT); `GenotypeHET` = mean(HET) − mean(WT), negative (HET is intermediate); `GenotypeKO` = mean(KO) − mean(WT), strongly negative; `GenotypeRESCUE` = mean(RESCUE) − mean(WT), near zero (the rescue worked). F-test p < 0.001: *someone* differs, and Q3 says who.
+:::
+
+### Q3 — Tukey vs Dunnett
+
+Run Tukey HSD (all 6 pairs) and Dunnett (3 comparisons vs WT). Compare the adjusted p-value for KO − WT. Which would you report when WT is the natural baseline?
+
+```{webr}
+#| exercise: m3q3
+aov_fit <- aov(Ratio ~ Genotype, data = blot_bio)
+TukeyHSD(aov_fit)
+
+dunnett <- multcomp::glht(aov_fit, linfct = multcomp::mcp(Genotype = "______"))
+summary(dunnett)
+confint(dunnett)
+```
+
+::: {.solution exercise="m3q3"}
+```r
+dunnett <- multcomp::glht(aov_fit, linfct = multcomp::mcp(Genotype = "Dunnett"))
+```
+Dunnett's adjusted p for KO − WT is smaller than Tukey's: it protects 3 control comparisons rather than 6 pairwise ones. For "did each genotype differ from WT?" report Dunnett; for "which genotypes differ from each other?" report Tukey. Never run both and pick the more significant one.
+:::
+
+### Q4 — Assumption checks and a log transform
+
+Look at the residual plots and formal tests for the raw-scale model, refit on the log scale, and back-transform the `GenotypeKO` coefficient into "KO is X% of WT".
+
+```{webr}
+#| exercise: m3q4
+#| fig-height: 3.8
+lm_fit <- lm(Ratio ~ Genotype, data = blot_bio)
+par(mfrow = c(1, 2)); plot(lm_fit, which = 1:2); par(mfrow = c(1, 1))
+shapiro.test(residuals(lm_fit))
+car::leveneTest(Ratio ~ Genotype, data = blot_bio)
+
+lm_log <- lm(______ ~ Genotype, data = blot_bio)
+shapiro.test(residuals(lm_log))
+car::leveneTest(log(Ratio) ~ Genotype, data = blot_bio)
+______(coef(lm_log)["GenotypeKO"])    # KO / WT geometric-mean ratio
+```
+
+::: {.hint exercise="m3q4"}
+Model `log(Ratio)`, then `exp()` the coefficient: a difference of logs is the log of a ratio.
+:::
+
+::: {.solution exercise="m3q4"}
+```r
+lm_log <- lm(log(Ratio) ~ Genotype, data = blot_bio)
+exp(coef(lm_log)["GenotypeKO"])
+```
+`GenotypeKO` ≈ −0.84 and `exp(-0.84) ≈ 0.43`: the KO geometric mean is about **43% of WT** (a 57% reduction). For this dataset both raw- and log-scale diagnostics are reasonable. For strictly positive ratios spanning an order of magnitude, the log scale is often the natural one.
+:::
+
+### Q5 — Two-way ANOVA with `ToothGrowth`
+
+Guinea-pig tooth growth by supplement (OJ vs VC) and dose. Fit the additive and interaction models, draw an interaction plot, and get the supplement contrast *within* each dose.
+
+```{webr}
+#| exercise: m3q5
+tg <- ToothGrowth
+tg$dose <- factor(tg$dose)
+
+fit_main <- lm(len ~ supp + dose, data = tg)
+anova(fit_main)
+
+fit_int <- lm(len ~ supp ______ dose, data = tg)
+anova(fit_int)
+
+emmip(fit_int, supp ~ dose, CIs = TRUE)
+emmeans(fit_int, pairwise ~ supp | ______)
+```
+
+::: {.solution exercise="m3q5"}
+```r
+fit_int <- lm(len ~ supp * dose, data = tg)
+emmeans(fit_int, pairwise ~ supp | dose)
+```
+Interaction p ≈ 0.02. OJ beats VC at 0.5 and 1 mg, but the two converge at 2 mg. In the interaction model the `suppVC` coefficient is the contrast at the reference dose (0.5 mg) only, so reporting it as "the supplement effect" would be misleading; report the within-dose contrasts.
+:::
+
+### Q6 — χ² test of independence
+
+Collapse `HairEyeColor` over sex, test independence, and find which cells drive the association.
+
+```{webr}
+#| exercise: m3q6
+tbl <- apply(HairEyeColor, c(1, 2), sum)
+tbl
+res <- chisq.test(tbl)
+res
+round(res$expected, 1)
+round(res$______, 2)    # standardised residuals: |z| > 2 is notable
+```
+
+::: {.solution exercise="m3q6"}
+```r
+round(res$stdres, 2)
+```
+χ² ≈ 138.3 on 9 df, p < 2.2×10⁻¹⁶. Blond+Blue and Black+Brown are over-represented; Blond+Brown and Black+Blue under-represented. All expected counts exceed 7.6, so the χ² approximation is fine; for sparse tables use `fisher.test()` or `chisq.test(simulate.p.value = TRUE)`.
+:::
+
+### Q7 — Pearson vs Spearman
+
+Correlate `hp` and `mpg` both ways, then corrupt one value and repeat.
+
+```{webr}
+#| exercise: m3q7
+cor(mtcars$hp, mtcars$mpg, method = "pearson")
+cor(mtcars$hp, mtcars$mpg, method = "spearman")
+
+mtcars2 <- mtcars
+mtcars2[1, "hp"] <- ______        # one wild value
+cor(mtcars2$hp, mtcars2$mpg, method = "pearson")
+cor(mtcars2$hp, mtcars2$mpg, method = "spearman")
+```
+
+::: {.solution exercise="m3q7"}
+With `mtcars2[1, "hp"] <- 2000`, Pearson moves from about −0.78 to −0.13, while Spearman only moves from about −0.89 to −0.83: ranks barely care about the size of an extreme value. Investigate outliers rather than switching methods to make them disappear.
+:::
+
+## Mini-project
+
+Produce the publishable blot analysis: the Module 1 dot plot with Dunnett significance annotations, a stats paragraph ("Band intensity, normalized to loading control, differed among genotypes (one-way ANOVA, F(3, 12) = …"), a methods paragraph, and an assumption-check appendix with the log-scale sensitivity refit.
+
+```{webr}
+#| caption: Sandbox
+aov_fit <- aov(Ratio ~ Genotype, data = blot_bio)
+summary(aov_fit)
+# your code here
+```
